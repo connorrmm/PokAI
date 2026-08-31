@@ -368,6 +368,76 @@ domain, so despite now holding a key I have not been able to make a single real
 call. Everything in `docs/CATALOG.md` about its endpoints and plans is from
 public pages, not from the API. **Confirming it is the first task of Phase 1.**
 
+## 9. The Next.js rebuild — in progress on a branch
+
+Started 2026-08-31 on `claude/audit-repo-state-a8hhjy`. **Not merged, and must
+not be merged yet.** See the hazard below.
+
+**Done and verified:**
+- Next.js 15 + TypeScript scaffolded. `npx next build` succeeds.
+- The scanner's decision logic is ported into typed modules under
+  `lib/scanner/` — `text.ts`, `confidence.ts`, `rank.ts`, `decide.ts`.
+- **16 tests, all passing**, covering the never-guess rule for the first time
+  in this project's history.
+- `/api/search` proxies tcgapi.dev with the key server-side, with retry and
+  backoff, rate limiting, and honest error text.
+- `/api/health` reports which server config is present, never its values.
+
+**Proof the tests are worth having.** They were checked by deliberately
+reintroducing the two defects that actually shipped — dropping candidates on a
+low-confidence read, and truncating the ambiguous list to 8. Three tests failed
+immediately; restoring the correct code turned them green. A test that cannot
+fail is decoration.
+
+**Proof the API behaves.** Run locally: `/api/health` returned config presence;
+`/api/search` with no query returned 400 with a real message; `/api/search?q=`
+against the (sandbox-blocked) upstream returned the **actual** error —
+`Host not in allowlist: api.tcgapi.dev` — rather than a generic failure, which
+is product rule 4 working. Firing 35 requests produced 29 upstream errors then
+429s, so the limiter trips exactly where configured.
+
+### Merge safety — RESOLVED, this branch is safe to merge
+
+There was a real hazard here and it is now fixed rather than merely documented.
+
+The live site is served as a static `index.html`. Adding `package.json` makes
+Vercel detect a Next.js project, so merging would have stopped serving that file
+and shown the rebuild's placeholder page instead — an immediate, user-visible
+regression.
+
+The fix: the single-file app moved to `public/app.html`, and a `beforeFiles`
+rewrite in `next.config.mjs` keeps `/` serving it. The rebuild lives at
+`/preview` until it is genuinely better. `beforeFiles` runs ahead of the
+filesystem, so it wins over any app-router page.
+
+Verified by running the production build locally: `/` returned 2,740,981 bytes
+titled "Pokai — Prototype", containing the never-guess fix and no truncation;
+`/preview` and both API routes returned 200/400 as expected.
+
+**When the ported UI is ready:** delete that rewrite and add `app/page.tsx`.
+That single change is the cutover, and it is reversible.
+
+Tracked in PR #1 (`https://github.com/connorrmm/PokAI/pull/1`).
+
+**Also ported since:** the OCR pipeline itself — Tesseract worker with its
+character whitelist and single-line page mode, multi-crop strategy with
+inverted-polarity retry and full-frame fallback, canvas preprocessing, Otsu
+thresholding, perceptual hashing — plus the full identification flow and a
+working scan screen at `/preview`.
+
+Verified in a real browser: the page renders with the scan control, and with no
+camera present it surfaces the actual reason — *"Camera unavailable: Requested
+device not found"* — rather than a generic failure.
+
+**Known limitation found while testing:** Tesseract loads its engine and
+language data from a third-party CDN at runtime. Versions are now pinned, and a
+failure surfaces the real reason instead of an uncaught error, but scanning
+still depends on that CDN being reachable. Self-hosting is the fix and is
+costed in `docs/ROADMAP.md` Phase 4.
+
+**Still to port:** portfolio, collection, scan history, tournaments, and the
+reveal animation. The scan path itself is done.
+
 ## Rules for whoever edits this file next
 
 1. Date it and name the commit you verified against.
