@@ -13,8 +13,12 @@ import {
   computeConfidence, autoAcceptFloorFor, isClearlyBest,
   AUTO_ACCEPT_FLOOR, AUTO_ACCEPT_FLOOR_HIGH_VALUE,
 } from '../lib/scanner/confidence';
-import { rankCandidatesByName, numberMatchesCard } from '../lib/scanner/rank';
+import { rankCandidatesByName } from '../lib/scanner/rank';
+import { numberMatchesCard, extractCardNumber } from '../lib/scanner/number';
 import type { ApiCard, RankedCandidate } from '../lib/scanner/types';
+import {
+  otsuThreshold, percentileRange, hammingDistance, hashSimilarity, toGray,
+} from '../lib/scanner/image';
 
 const card = (id: number, name: string, number?: string, marketPrice = 5): ApiCard =>
   ({ id, name, number, marketPrice });
@@ -124,15 +128,42 @@ describe('confidence: the ceiling must be reachable', () => {
 });
 
 describe('card number matching', () => {
-  it('treats a missing number as unknown, not as a mismatch', () => {
-    expect(numberMatchesCard(null, card(1, 'Charizard', '4/102'))).toBeNull();
-    expect(numberMatchesCard('4/102', card(1, 'Charizard'))).toBeNull();
+  const n = (s: string) => extractCardNumber(s);
+
+  it('extracts a printed number, stripping leading zeros', () => {
+    expect(n('025/185')).toEqual({ num: '25', total: '185' });
+    expect(n('noise 4 / 102 more noise')).toEqual({ num: '4', total: '102' });
+    expect(n('no number here')).toBeNull();
   });
-  it('ignores leading zeros', () => {
-    expect(numberMatchesCard('025/185', card(1, 'Charizard', '25/185'))).toBe(true);
+
+  it('treats a missing number as unknown, NOT as a mismatch', () => {
+    // This matters: a mismatch costs 35 confidence points. Failing to read
+    // small print is benign and must not be punished as contradiction.
+    expect(numberMatchesCard(null, '4/102')).toBeNull();
+    expect(numberMatchesCard(n('4/102'), null)).toBeNull();
+    expect(numberMatchesCard(n('4/102'), undefined)).toBeNull();
   });
+
+  it('ignores leading zeros on both sides', () => {
+    expect(numberMatchesCard(n('025/185'), '25/185')).toBe(true);
+    expect(numberMatchesCard(n('25/185'), '025/185')).toBe(true);
+  });
+
   it('rejects a genuine mismatch', () => {
-    expect(numberMatchesCard('4/102', card(1, 'Charizard', '25/185'))).toBe(false);
+    expect(numberMatchesCard(n('4/102'), '25/185')).toBe(false);
+  });
+
+  it('same numerator but a DIFFERENT set total is a mismatch', () => {
+    // Deliberate improvement on the prototype, which compared only the
+    // numerator and so counted 25/185 as corroborating a card printed 25/102.
+    // Those are different prints in different sets; treating that as evidence
+    // FOR the card could push a wrong one over the auto-accept bar.
+    expect(numberMatchesCard(n('25/185'), '25/102')).toBe(false);
+    expect(numberMatchesCard(n('25/185'), '25/185')).toBe(true);
+  });
+
+  it('still matches when the card has no set total to compare', () => {
+    expect(numberMatchesCard(n('25/185'), '25')).toBe(true);
   });
 });
 
@@ -147,5 +178,59 @@ describe('ranking', () => {
   it('a tie is not clearly best', () => {
     expect(isClearlyBest(ranked(3, 95))).toBe(false);
     expect(isClearlyBest([{ apiCard: card(1, 'X'), score: 95 }])).toBe(true);
+  });
+});
+
+describe('image maths', () => {
+  it('otsu separates two clear clusters and lands in the gap', () => {
+    // Dark ink at 20, light background at 220, nothing between.
+    const hist = new Array(256).fill(0);
+    hist[20] = 500; hist[220] = 500;
+    const t = otsuThreshold(hist, 1000);
+    expect(t).toBeGreaterThan(20);
+    expect(t).toBeLessThan(220);
+  });
+
+  it('otsu takes the MIDPOINT of a plateau, not its first value', () => {
+    // The prototype comment explains why: landing on a cluster edge
+    // misclassifies borderline pixels under noise.
+    const hist = new Array(256).fill(0);
+    hist[10] = 100; hist[200] = 100;
+    const t = otsuThreshold(hist, 200);
+    expect(t).toBeGreaterThan(50);
+    expect(t).toBeLessThan(160);
+  });
+
+  it('percentile clip ignores outliers at both ends', () => {
+    const hist = new Array(256).fill(0);
+    hist[0] = 1;      // a single black speck
+    hist[255] = 1;    // a single glare pixel
+    for (let v = 100; v <= 150; v++) hist[v] = 20;
+    const total = 2 + 51 * 20;
+    const { lo, hi } = percentileRange(hist, total, 0.02);
+    expect(lo).toBeGreaterThanOrEqual(100);
+    expect(hi).toBeLessThanOrEqual(150);
+  });
+
+  it('hamming returns null rather than a wrong number on unusable input', () => {
+    expect(hammingDistance(null, '1010')).toBeNull();
+    expect(hammingDistance('1010', null)).toBeNull();
+    expect(hammingDistance('1010', '101')).toBeNull();
+    expect(hammingDistance('1010', '1010')).toBe(0);
+    expect(hammingDistance('1010', '0101')).toBe(4);
+  });
+
+  it('a null distance yields a null similarity, never 0', () => {
+    // 0% similarity would look like strong evidence AGAINST the card.
+    // Missing must stay missing.
+    expect(hashSimilarity(null)).toBeNull();
+    expect(hashSimilarity(0)).toBe(100);
+    expect(hashSimilarity(32)).toBe(50);
+  });
+
+  it('grayscale uses Rec.601 luma', () => {
+    expect(toGray(255, 255, 255)).toBe(255);
+    expect(toGray(0, 0, 0)).toBe(0);
+    expect(toGray(255, 0, 0)).toBe(76);
   });
 });
