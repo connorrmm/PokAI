@@ -1677,15 +1677,23 @@ function matchCardName(rawText){
    this requires network access, unlike the tiny local CARD_POOL fallback
    below (kept so the app still works offline).
 
-   As of this build, card search goes through PokAi's own backend
-   (see /pokai-backend) instead of calling the free database directly from
-   the browser. The backend holds any real recognition provider's API key
+   Card search goes through PokAI's own backend rather than calling a card
+   database directly from the browser. The backend holds every paid API key
    server-side (never exposed here) and normalizes whichever provider
    answered into this same card shape — so nothing else in this file needs
-   to change if/when a paid provider gets added behind it. Point this at
-   your deployed backend once you have one; it defaults to a local dev
-   server so this still runs out of the box while you're setting that up. */
-const POKAI_BACKEND_BASE = window.POKAI_BACKEND_BASE || 'http://localhost:3001';
+   to change if/when the provider behind it changes.
+
+   The default is an EMPTY base, i.e. same-origin: '/api/search' on whatever
+   host is serving this page. That is what works on Vercel, where the API
+   deploys alongside this file.
+
+   It used to default to 'http://localhost:3001', which could never work on a
+   deployed site — that address means "the visitor's own machine", and a page
+   served over HTTPS is not permitted to call http:// at all (browsers block
+   it as mixed content). Override it only for local development against a
+   separately-hosted API, by setting window.POKAI_BACKEND_BASE in an inline
+   script tag before this one, e.g. to 'http://localhost:3001'. */
+const POKAI_BACKEND_BASE = (typeof window !== 'undefined' && window.POKAI_BACKEND_BASE) || '';
 const POKEMON_TCG_API_BASE = POKAI_BACKEND_BASE + '/api/search';
 const ENERGY_LETTER = {
   Grass:'G', Fire:'R', Water:'W', Lightning:'L', Psychic:'P', Fighting:'F',
@@ -1812,6 +1820,27 @@ function ocrVariants(word, maxVariants){
   return Array.from(variants);
 }
 
+// The public card database this ultimately calls through has a documented
+// history of transient failures (a monitored ~40% single-request success
+// rate) — without a retry, a routine transient failure on the FIRST, best
+// query variant just falls through to progressively weaker fallback
+// guesses, even when the original query would have found the card fine on
+// a second try. Retrying the same query a couple of times before giving up
+// on it is worth far more here than trying yet another guessed variant.
+async function fetchCardSearch(url, maxAttempts){
+  maxAttempts = maxAttempts || 3;
+  let lastErr;
+  for(let attempt = 0; attempt < maxAttempts; attempt++){
+    try{
+      const res = await withTimeout(fetch(url), 12000, 'Card database request');
+      if(res.ok) return res;
+      lastErr = new Error('Card database returned ' + res.status);
+    }catch(e){ lastErr = e; }
+    if(attempt < maxAttempts - 1) await new Promise(r => setTimeout(r, 350 * (attempt + 1)));
+  }
+  throw lastErr;
+}
+
 async function searchRealCardDatabase(rawQueryText){
   const clean = rawQueryText.toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
   if(!clean) return [];
@@ -1840,11 +1869,10 @@ async function searchRealCardDatabase(rawQueryText){
       // query syntax the active provider actually needs — the frontend
       // doesn't need to know or care which provider is behind it.
       const url = POKEMON_TCG_API_BASE + '?q=' + encodeURIComponent(q);
-      const res = await fetch(url);
-      if(!res.ok) continue;
+      const res = await fetchCardSearch(url);
       const data = await res.json();
       if(data && Array.isArray(data.data) && data.data.length > 0) return data.data;
-    }catch(e){ console.warn('Card database search failed for "'+q+'":', e); }
+    }catch(e){ console.warn('Card database search failed for "'+q+'" after retries:', e); }
   }
   return [];
 }
@@ -2143,11 +2171,16 @@ async function identifyCardFromPhoto(cardPhotoDataUrl, qualityScore, fullFrameDa
   if(confidence >= autoAcceptFloor && clearlyBest){
     return {ok:true, source:'live-db', text, apiCard:top.apiCard, matchScore:top.score, confidence, numberMatch, imageSimilarity};
   }
+  // Whenever the EXACT print can't be pinned down confidently — whether
+  // that's a weak read or several prints tied on name — the honest answer
+  // isn't a guess or a dead end, it's every card that matches the name we
+  // did read, so the person can just tap theirs. "Never guess" beats
+  // "couldn't find it."
+  const nameMatches = ranked.filter(r => r.score >= 60).map(r => r.apiCard);
   if(confidence < rescanFloor){
-    // don't guess at all — a low-confidence auto-add is worse than asking again
-    return {ok:false, reason:'low_confidence', text, confidence, topGuess: top.apiCard};
+    return {ok:false, reason:'low_confidence', text, confidence, topGuess: top.apiCard, candidates: nameMatches};
   }
-  return {ok:false, reason:'ambiguous', text, confidence, topGuess: top.apiCard, candidates: ranked.slice(0, 8).map(r => r.apiCard)};
+  return {ok:false, reason:'ambiguous', text, confidence, topGuess: top.apiCard, candidates: nameMatches};
 }
 
 function stopCamera(){
@@ -2299,12 +2332,28 @@ function showIdentifyFallback(photoResult, result, context){
     reasonEl.textContent = readText
       ? 'Matched as "' + readText + '" — pick the correct card below.'
       : 'Pick the correct card below.';
-  } else if(result.reason === 'ambiguous'){
-    reasonEl.textContent = 'Found several cards named "' + readText + '"' +
-      (typeof result.confidence === 'number' ? ' (' + result.confidence + '% confidence)' : '') +
-      ' — tap the one that matches your photo, or search for a different one.';
-  } else if(result.reason === 'low_confidence'){
-    reasonEl.textContent = 'Not confident enough to guess (' + (result.confidence||0) + '% confidence) — retake the photo with better lighting, or search for the card manually.';
+  } else if(result.reason === 'ambiguous' || result.reason === 'low_confidence'){
+    // Two genuinely different situations — "several prints share this name"
+    // is not the same experience as "I could barely read this" — so they get
+    // different wording, and the confidence number is shown because a tool
+    // that tells you how sure it is reads as careful rather than vague.
+    //
+    // What they must NOT differ on: both render the full candidate list.
+    // An earlier build split these messages and dropped the candidates from
+    // the low-confidence branch, which produced exactly the dead end
+    // docs/PRODUCT.md forbids. Keep both branches pointing at the list.
+    const pct = (typeof result.confidence === 'number') ? result.confidence + '% confidence' : null;
+    if(result.reason === 'ambiguous'){
+      reasonEl.textContent = (readText ? 'Found several cards matching "' + readText + '"'
+                                       : 'Found several possible matches')
+        + (pct ? ' (' + pct + ')' : '')
+        + ' — tap the one that matches your photo.';
+    } else {
+      reasonEl.textContent = (readText ? 'Not confident about "' + readText + '"'
+                                       : 'Not confident about that read')
+        + (pct ? ' (' + pct + ')' : '')
+        + ' — tap your card below, or retake the photo with better lighting.';
+    }
   } else if(result.reason === 'ocr_unavailable'){
     reasonEl.textContent = "Couldn't load the OCR engine (offline?) — search for the card manually.";
   } else if(readText){
@@ -2423,6 +2472,31 @@ function retakeFromFallback(){
   pendingFallbackContext = null;
 }
 
+const TIER_COLOR_HEX = {common:'#9CA0B8', uncommon:'#2FD9A0', rare:'#39A9FF', holo:'#E8483A', secret:'#FFC24D'};
+
+// A clean, generated card-back placeholder (a colored gradient in the
+// card's own rarity color, with its emoji centered) — built entirely
+// client-side from data the card already has, so it never depends on a
+// network call succeeding. This is what makes card art land for every
+// card in the demo catalog, in any environment: sandboxed preview,
+// deployed-without-a-backend-yet, or genuinely offline.
+function generatePlaceholderArt(card){
+  const color = TIER_COLOR_HEX[card.tier] || TIER_COLOR_HEX.common;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 336">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.85"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0.45"/>
+      </linearGradient>
+    </defs>
+    <rect width="240" height="336" rx="14" fill="url(#g)"/>
+    <rect x="6" y="6" width="228" height="324" rx="10" fill="none" stroke="#ffffff" stroke-opacity="0.4" stroke-width="2"/>
+    <text x="120" y="170" font-size="96" text-anchor="middle" dominant-baseline="middle">${card.emoji || '\ud83c\udccf'}</text>
+    <text x="120" y="290" font-size="18" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-weight="600">${escapeHtml(card.name)}</text>
+  </svg>`;
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+}
+
 async function ensureCardPhoto(card){
   if(card.photo || card.photoAttempted) return;
   card.photoAttempted = true;
@@ -2431,18 +2505,24 @@ async function ensureCardPhoto(card){
     // only place in the whole app that ever talks to a card database
     // directly — consistent with keeping any real provider key server-side
     const res = await fetch(POKEMON_TCG_API_BASE + '?q=' + encodeURIComponent(card.name));
-    if(!res.ok){ console.warn('Card database returned', res.status, 'for', card.name); return; }
-    const json = await res.json();
-    const hit = json.data && json.data[0];
-    if(hit && hit.images){
-      card.photo = hit.images.large || hit.images.small;
-      card.realSetRef = hit.set ? hit.set.name : null;
-    } else {
-      console.warn('No card art match found for', card.name);
+    if(!res.ok){ console.warn('Card database returned', res.status, 'for', card.name); }
+    else{
+      const json = await res.json();
+      const hit = json.data && json.data[0];
+      if(hit && hit.images){
+        card.photo = hit.images.large || hit.images.small;
+        card.realSetRef = hit.set ? hit.set.name : null;
+      } else {
+        console.warn('No card art match found for', card.name);
+      }
     }
   }catch(e){
     console.warn('Card art fetch failed for', card.name, '— likely offline or backend unreachable:', e);
   }
+  // Whatever happened above — success, a miss, or no network at all — this
+  // card gets real art either way. A generated placeholder beats a blank
+  // slot, and it never leaves the catalog looking broken.
+  if(!card.photo) card.photo = generatePlaceholderArt(card);
 }
 
 let revealAutoTimer = null;
