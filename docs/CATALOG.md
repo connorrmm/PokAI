@@ -6,11 +6,29 @@
 It covers Pokémon card data and daily market values, authenticates with an
 `X-API-Key` header, and exposes cards, sets/expansions, and pricing endpoints.
 
-Plans, as published: Free 100 requests/day, Hobby $9.99 (1K/day), Starter $19.99
-(2.5K/day), Pro $49.99 (10K/day), Business $99.99 (50K/day). **Free, Hobby and
-Starter are licensed for personal and non-commercial use only — commercial use
-starts at Pro.** PokAI is commercial, so Pro is the floor for launch. Build and
-test on Free.
+**Plans — VERIFIED 2026-08-31** from the vendor's own page (their pricing table
+is emitted in the page source, so this is their data, not a summary of it):
+
+| Tier | Price/mo | Requests/day | Commercial use |
+|---|---|---|---|
+| Free | $0 | 100 | **no** |
+| Hobby | $9.99 | 1,000 | **no** |
+| Starter | $19.99 | 2,500 | **no** |
+| **Pro** | **$49.99** | **10,000** | **yes** |
+| Business | $99.99 | 50,000 | yes |
+
+PokAI is commercial, so **Pro is the floor for launch.** Build and test on Free.
+
+There is also an x402 pay-per-request option (USDC on Base or Solana, no
+account): ~$0.005 per search or card lookup, $0.05 bulk, $0.25 export. Noted for
+completeness; a monthly plan is simpler and avoids putting crypto in the payment
+path.
+
+**Still unread: the data licensing terms.** Their docs list a licensing page
+covering "commercial use, caching, derived data, attribution, redistribution
+boundary." The caching and redistribution clauses bear directly on the design in
+`docs/ARCHITECTURE.md`, which copies their catalog into our database. **Read
+before the sync job is written.**
 
 **Endpoint correction, 2026-08-31.** The API base is **`https://api.tcgapi.dev/v1`**
 — an `api.` subdomain. Requests to `https://tcgapi.dev/v1/...` return **404 on
@@ -18,17 +36,59 @@ every path**, which Sterling confirmed by running them from his own machine.
 Notably they return 404 rather than 401, meaning the key is never even checked;
 the paths simply do not exist there.
 
-A documented example call is:
+**CONFIRMED WORKING 2026-08-31** — a real call returned HTTP 200 with live data:
 
 ```
-curl "https://api.tcgapi.dev/v1/search?q=charizard&game=pokemon" \
+curl "https://api.tcgapi.dev/v1/search?q=charizard&game=pokemon&limit=2" \
   -H "X-API-Key: YOUR_API_KEY"
 ```
 
-The `api.` subdomain and that `/search` shape come from their published docs via
-web search and are **still not confirmed by a successful call.** They also
-publish an AI-readable reference at `tcgapi.dev/llms/` worth pulling in full
-before the sync job is written.
+Endpoints known to exist:
+
+| Endpoint | Auth | Notes |
+|---|---|---|
+| `GET /v1/search?q=&game=&limit=` | key | cross-game card + sealed search — **verified 200** |
+| `GET /v1/games` | none | 54 games, with card counts — **verified 200** |
+| `GET /v1/games/{slug}/sets` | none | sets per game |
+| `GET /v1/cards/{id}` | key | card detail, per-condition prices, history |
+| `GET /v1/bulk/...` | key | bulk prices and resolve-by-name |
+| `GET /v1/x402/info` | none | live pay-per-request price map |
+
+`GET /v1/cards?q=...` returns **404** — the cards endpoint is by id, not a query.
+Search is the query endpoint.
+
+Authoritative machine-readable spec: `https://tcgapi.dev/openapi.yaml`, with a
+full LLM-oriented reference at `https://tcgapi.dev/llms-full.txt`.
+
+**Data freshness, per their own description:** prices refresh **daily** for the
+major games including Pokémon, and catalog-wide every 3 days. Pricing is sourced
+from **TCGPlayer**. A nightly sync therefore matches their update cadence
+exactly — running it more often would spend quota for no new data.
+
+### Verified response shape
+
+```json
+{ "id": 21939, "name": "Charizard", "clean_name": "charizard",
+  "number": "025/185", "rarity": "Rare", "tcgplayer_id": 226395,
+  "product_type": "Cards", "foil_only": 0, "total_listings": 354,
+  "game_name": "Pokemon", "game_slug": "pokemon",
+  "set_name": "SWSH04: Vivid Voltage", "printing": "Normal",
+  "market_price": 3.68, "low_price": 0.96, "median_price": 4.2,
+  "lowest_with_shipping": 1.34,
+  "price_updated_at": "2026-08-31T07:18:27.028Z",
+  "image_url": "https://product-images.tcgplayer.com/fit-in/400x400/226395.jpg" }
+```
+
+Two things this settles. **`price_updated_at` is supplied by the provider** —
+that is when the price was true, which is a different fact from when we fetched
+it, and the schema now stores both. And **card images are hosted by TCGPlayer**,
+not by us, which is relevant to the copyright question in
+`docs/OPEN-QUESTIONS.md`: we would be linking their images rather than storing
+Pokémon artwork ourselves.
+
+Conventions worth knowing: pagination is `page` / `per_page` / `has_more` with
+`per_page` capped at 200; errors come back as `{error:{message,code}}`; rate
+limit state is in `X-RateLimit-*` response headers.
 
 Caution learned here: search results mix up at least three similarly named
 services — **tcgapi.dev**, tcgapis.com and tcgapi.net. Earlier notes in this
