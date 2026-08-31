@@ -368,6 +368,50 @@ domain, so despite now holding a key I have not been able to make a single real
 call. Everything in `docs/CATALOG.md` about its endpoints and plans is from
 public pages, not from the API. **Confirming it is the first task of Phase 1.**
 
+## 9. The Next.js rebuild — in progress on a branch
+
+Started 2026-08-31 on `claude/audit-repo-state-a8hhjy`. **Not merged, and must
+not be merged yet.** See the hazard below.
+
+**Done and verified:**
+- Next.js 15 + TypeScript scaffolded. `npx next build` succeeds.
+- The scanner's decision logic is ported into typed modules under
+  `lib/scanner/` — `text.ts`, `confidence.ts`, `rank.ts`, `decide.ts`.
+- **16 tests, all passing**, covering the never-guess rule for the first time
+  in this project's history.
+- `/api/search` proxies tcgapi.dev with the key server-side, with retry and
+  backoff, rate limiting, and honest error text.
+- `/api/health` reports which server config is present, never its values.
+
+**Proof the tests are worth having.** They were checked by deliberately
+reintroducing the two defects that actually shipped — dropping candidates on a
+low-confidence read, and truncating the ambiguous list to 8. Three tests failed
+immediately; restoring the correct code turned them green. A test that cannot
+fail is decoration.
+
+**Proof the API behaves.** Run locally: `/api/health` returned config presence;
+`/api/search` with no query returned 400 with a real message; `/api/search?q=`
+against the (sandbox-blocked) upstream returned the **actual** error —
+`Host not in allowlist: api.tcgapi.dev` — rather than a generic failure, which
+is product rule 4 working. Firing 35 requests produced 29 upstream errors then
+429s, so the limiter trips exactly where configured.
+
+### ⚠️ Merge hazard — read before merging this branch
+
+The live site at `pok-ai-drab.vercel.app` is served as a **static
+`index.html`**. Adding `package.json` makes Vercel detect a Next.js project, so
+**the moment this branch merges to `main`, Vercel will stop serving
+`index.html` and serve the Next.js app instead** — which is currently a
+placeholder page, not the scanner.
+
+Do not merge until either the scanner UI is ported, or `index.html` is
+deliberately wired to keep serving at `/`. Branch previews are unaffected and
+safe.
+
+**Still to port:** the entire interface — scan flow, camera, reveal, portfolio,
+collection, tournaments. The OCR pipeline itself (Tesseract worker, crop
+strategy, Otsu thresholding, image hashing) is still only in `index.html`.
+
 ## Rules for whoever edits this file next
 
 1. Date it and name the commit you verified against.

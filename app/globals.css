@@ -1,0 +1,17 @@
+:root {
+  --bg: #0B0D14;
+  --panel: #151827;
+  --text: #E8EAF2;
+  --muted: #9CA0B8;
+  --accent: #39A9FF;
+  --border: rgba(255, 255, 255, 0.08);
+}
+* { box-sizing: border-box; }
+html, body { padding: 0; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); }
