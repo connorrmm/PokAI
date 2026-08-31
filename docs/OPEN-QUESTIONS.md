@@ -112,9 +112,44 @@ No auth exists. Once collections persist, this becomes a real product with real
 user data — which brings security and privacy obligations. Worth designing
 deliberately rather than bolting on.
 
-**8. What "condition tracking" means concretely.**
-Listed as MVP, but never specified. Self-reported condition grade? Photo-based
-assessment? Grading-service integration? Needs definition before building.
+**8. What "condition tracking" means — DECIDED 2026-08-31.**
+Sterling had no view on this, so the call is mine.
+
+*What it is, plainly:* the physical wear on a card. Collectors grade it on a
+standard five-step scale — Near Mint, Lightly Played, Moderately Played, Heavily
+Played, Damaged — and it moves value enormously. The same card can be worth
+several times more in Near Mint than Damaged. A collection valued without
+condition is not really valued at all.
+
+**Decision: the user picks the condition from the five standard grades.**
+
+*Why the simple version is also the right one:* tcgapi.dev already returns
+**per-condition prices** (NM/LP/MP/HP/Damaged). So a dropdown is not a
+placeholder for something better — it feeds directly into a genuinely accurate
+valuation using data we already pay for. It is roughly a day of work and it
+makes the portfolio number real.
+
+**Default is "not set", never "Near Mint".** Defaulting to the best grade would
+silently inflate every collection's value, which is fabricating a number — rule
+2. An unset card shows a value range, or no value, and asks.
+
+**Explicitly not doing: assessing condition from the photo.** It is genuinely
+hard — surface scratches, edge whitening and centring do not survive a phone
+camera reliably — and being confidently wrong about condition produces a
+confidently wrong valuation. That is precisely the failure the never-guess rule
+exists to prevent, and here it would be quieter and more damaging, because a
+wrong price looks plausible in a way a wrong card name does not. Professional
+graders charge real money for this judgement, which is the tell.
+
+**Explicitly not doing for MVP: grading-service integration** (PSA, BGS, CGC).
+Real feature, different product, revisit after launch. The schema already has
+room: `collections.condition` is free text, so a graded slab can later be
+recorded as its own value without a migration.
+
+*Possible later, and worth keeping in mind:* the photo is already captured and
+stored. If a labelled set of condition-graded photos ever accumulates,
+suggesting a condition — clearly marked as a suggestion the user confirms —
+becomes defensible. Suggesting is not the same as deciding. **Closed.**
 
 ## Context worth knowing
 

@@ -60,7 +60,11 @@ The things that must work before anything else is worth building:
 6. Valuation and value tracking over time
 7. Scan history
 8. Manual correction when the scanner gets it wrong
-9. Condition tracking
+9. Condition tracking — the user picks from the five standard grades
+   (Near Mint / Lightly Played / Moderately Played / Heavily Played / Damaged),
+   defaulting to unset rather than Near Mint. Feeds the per-condition prices
+   tcgapi.dev already returns. Never assessed automatically from the photo —
+   see `docs/OPEN-QUESTIONS.md` #8.
 10. Market transparency — where a price came from and when it was updated
 
 ## Core values

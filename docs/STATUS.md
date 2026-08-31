@@ -316,8 +316,30 @@ issues originating from this schema. Details in `supabase/README.md`.
 
 The database is currently **empty of real data** — all test rows were deleted.
 
-**Vercel — connected, nothing deployed, and the API is misbehaving.** Team
-`longsterling61-4597's projects`, Hobby plan.
+**Vercel — DEPLOYED 2026-08-31.** Live at `pok-ai-drab.vercel.app`, built from
+`main` of `connorrmm/PokAI`, created through the dashboard after the API route
+failed.
+
+**Verification status, stated precisely:** I could not load the site. This
+environment's egress proxy blocks `vercel.app`, so both `curl` and a fetch
+returned nothing. What I did verify is that local `main`, remote `main` and the
+commit Vercel built are all `3475d5f`, and that this commit contains every Phase
+0 fix — candidates returned on a low-confidence read, no truncation to 8,
+same-origin backend, retry logic, placeholder art. **So the deployed code is
+correct; whether the deployed page renders is unconfirmed by me** and needs a
+human to open it.
+
+Card lookups will fail on the live site until the API exists. That is expected:
+the app falls back to its 22-card offline pool with generated placeholder art.
+
+Historic note on the tooling, so it is not repeated: creating the project through
+the Vercel API reported success and returned a project id, but the project was
+then invisible to every read — `get_project` 404'd and `list_projects` came back
+empty, while a repeat attempt returned `409 already exists`. Two half-created
+projects (`pokai`, `pokai-app`) may still exist and should be deleted. The
+dashboard import worked first time.
+
+Team `longsterling61-4597's projects`, Hobby plan.
 
 The never-guess blocker is now fixed, so the app is deployable. What is blocking
 is a tooling problem, recorded here so the next session does not repeat it:
