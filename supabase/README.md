@@ -9,9 +9,35 @@ a lie.
 - `0002_users_rls.sql` — profiles + user tables and their RLS policies. The
   `profiles` table and the signup trigger are still live from this file; its
   other table definitions are superseded by 0003.
-- `0003_align_schema_with_tcgapi.sql` — **current.** Rebuilt against the real
-  tcgapi.dev response shape after an actual API call, replacing what had been
-  guessed from documentation.
+- `0003_align_schema_with_tcgapi.sql` — rebuilt against the real tcgapi.dev
+  response shape after an actual API call.
+- `0004_licence_compliance_catalog_server_only.sql` — **current.** Closes client
+  access to the cached catalog and prices. See below; this one is not optional.
+
+## The catalog is server-only, and must stay that way
+
+tcgapi.dev's licence permits caching their data in our database but forbids
+"public, unrestricted downloads of our records" and operating anything that
+"serves our pricing data to third parties."
+
+The original policies let the `anon` role read `cards` and `card_prices`.
+Because Supabase publishes every table over PostgREST and the anon key ships
+inside the browser, that combination meant anyone could have paged our whole
+price database out of Supabase — a licence breach, and effectively a free proxy
+to a paid service.
+
+**Rule going forward: no client role ever gets SELECT on `cards`, `card_prices`,
+or `card_sets`.** Our API reads them with the service_role key and returns only
+what a given screen needs. If a future migration adds a policy to those tables,
+that is a bug unless the licence has changed.
+
+Verified with real rows present, so an empty table could not fake a pass:
+
+| Role | Table | Result |
+|---|---|---|
+| anon | cards / card_prices | blocked (42501) |
+| authenticated | cards / card_prices | blocked (42501) |
+| service_role (our API) | card_prices | readable — intended |
 
 ## What the guessed schema got wrong
 

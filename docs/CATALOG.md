@@ -24,11 +24,52 @@ account): ~$0.005 per search or card lookup, $0.05 bulk, $0.25 export. Noted for
 completeness; a monthly plan is simpler and avoids putting crypto in the payment
 path.
 
-**Still unread: the data licensing terms.** Their docs list a licensing page
-covering "commercial use, caching, derived data, attribution, redistribution
-boundary." The caching and redistribution clauses bear directly on the design in
-`docs/ARCHITECTURE.md`, which copies their catalog into our database. **Read
-before the sync job is written.**
+### Data licensing — READ 2026-08-31. Our architecture is permitted.
+
+Their terms are unusually clear, and the summary line is *"use our data to power
+your product — don't make our data the product."*
+
+**Explicitly allowed, and it is what we do:**
+- **Server-side caching.** "You may cache API responses in your own database and
+  serve your users from that cache during an active subscription." Keep cached
+  prices at least as fresh as the app claims they are — our nightly sync against
+  their daily refresh satisfies this.
+- **Showing prices in the app**, at card and collection level.
+- **Derived metrics** — charts, trends, collection valuations, ROI. Analytics we
+  compute are ours. The exception is a "thin disguise": re-publishing their
+  prices with trivial changes (rounding, renaming fields) is still
+  redistribution.
+- **Running a private backend.**
+- **Development and testing before launch on any plan** — "upgrade before you
+  monetize."
+
+**The hard line, on every plan including Business:**
+> Don't operate an API, feed, file dump, or export that serves their pricing
+> data to third parties. Don't sell or give away bulk datasets. Don't offer
+> public, unrestricted downloads. Don't act as a data broker.
+>
+> The practical test: *if someone could use your product instead of subscribing
+> to TCG API in order to get the data, that's not permitted.*
+
+**This caught a real defect in what had already been built.** The database
+policies allowed the public `anon` role to read `cards` and `card_prices`.
+Supabase serves every table over PostgREST and the anon key ships in the
+browser, so anyone holding it could have paged out the entire cached price
+database — a textbook "public, unrestricted download of our records," and PokAI
+would have been an accidental free proxy for a paid service.
+
+Fixed in `supabase/migrations/0004`: the catalog and prices are now server-only,
+reachable solely by our API using the service_role key. Verified with real rows
+present. **Never add a client-readable policy to those tables.**
+
+Two consequences for the API design:
+1. `/api/search` and any card endpoint must not become a general-purpose public
+   card-price API. Rate limit them, and once accounts exist, require a session.
+2. No bulk export endpoint, ever — not even an internal one that could be found.
+
+**Still to read:** the Attribution, Card images, and When you cancel sections.
+Attribution may require visible credit in the app; the cancellation clause
+governs what happens to cached data if the subscription lapses.
 
 **Endpoint correction, 2026-08-31.** The API base is **`https://api.tcgapi.dev/v1`**
 — an `api.` subdomain. Requests to `https://tcgapi.dev/v1/...` return **404 on
