@@ -19,7 +19,29 @@
 import { otsuThreshold, percentileRange, toGray } from './image';
 
 let workerPromise: Promise<any> | null = null;
-export let ocrEngineReady = false;
+let ocrEngineReady = false;
+let ocrFailure: string | null = null;
+
+export function isOcrReady(): boolean { return ocrEngineReady; }
+/** The real reason OCR is unavailable, for showing the user (rule 4). */
+export function ocrFailureReason(): string | null { return ocrFailure; }
+
+/**
+ * Tesseract fetches its worker script, WASM core and language data at runtime.
+ * Pinned to exact versions here so a CDN-side release cannot silently change
+ * recognition behaviour underneath us -- the scanner's accuracy is the product.
+ *
+ * KNOWN RISK, not yet fixed: this makes the core product function depend on a
+ * third-party CDN being reachable. Blocked networks, strict corporate proxies
+ * and CDN outages all break scanning. Self-hosting is the fix and costs roughly
+ * 15 MB of engine plus language data in the repo; it is a deliberate
+ * pre-launch task rather than something to slip in unmeasured.
+ * Tracked in docs/ROADMAP.md Phase 4.
+ */
+const TESS_VERSION = '5.1.1';
+const TESS_CDN = `https://cdn.jsdelivr.net/npm/tesseract.js@${TESS_VERSION}/dist`;
+const TESS_CORE_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1';
+const TESS_LANG_CDN = 'https://tessdata.projectnaptha.com/4.0.0';
 
 /** Race a promise against a hard limit, turning a silent hang into a real error. */
 export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -39,7 +61,13 @@ export async function getWorker(): Promise<any | null> {
   if (typeof window === 'undefined') return null;
   if (!workerPromise) {
     workerPromise = import('tesseract.js')
-      .then(({ createWorker }) => createWorker('eng'))
+      .then(({ createWorker }) =>
+        createWorker('eng', undefined, {
+          workerPath: `${TESS_CDN}/worker.min.js`,
+          corePath: TESS_CORE_CDN,
+          langPath: TESS_LANG_CDN,
+        }),
+      )
       .then(async (worker: any) => {
         // Restricting the character set stops Tesseract hallucinating symbols
         // on foil and textured backgrounds, which otherwise pollute matching.
@@ -54,6 +82,9 @@ export async function getWorker(): Promise<any | null> {
         return worker;
       })
       .catch((e) => {
+        // Surface the REAL reason. "Recognition unavailable" with no cause is
+        // exactly what made this app undebuggable in the field (rule 4).
+        ocrFailure = e instanceof Error ? e.message : String(e);
         console.warn('OCR engine failed to initialise:', e);
         workerPromise = null;
         return null;
@@ -62,7 +93,14 @@ export async function getWorker(): Promise<any | null> {
   return workerPromise;
 }
 
-/** Warm the engine at page load so the first scan does not look like a hang. */
+/**
+ * Warm the engine at page load so the first scan does not look like a hang.
+ * The worker downloads several MB on first use.
+ *
+ * Failures are swallowed deliberately: this is speculative work, and a
+ * warm-up failure must never surface as an error the user did not ask for.
+ * The reason is recorded and shown only if they actually try to scan.
+ */
 export function warmUpOcr(): void {
   void getWorker().catch(() => {});
 }

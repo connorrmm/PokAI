@@ -81,11 +81,35 @@ PokAI becomes a product rather than a demo.
 
 ## Phase 4 — Production hardening.
 
-Rate limiting per user; scan photo storage; real error surfacing; monitoring and
-alerts; a backup policy; and a decision on the two legal questions in
-`docs/OPEN-QUESTIONS.md` — card image copyright and pricing-data licensing.
-Those are lawyer questions, not engineering ones, and they want answering before
-money changes hands, not after.
+Rate limiting per user; scan photo storage; monitoring and alerts; a backup
+policy; and a decision on the card-image copyright question in
+`docs/OPEN-QUESTIONS.md`. That one is a lawyer question, not an engineering one,
+and wants answering before money changes hands.
+
+Three specific items found during the rebuild, each recorded where the code
+lives so they cannot be quietly forgotten:
+
+1. **Self-host the OCR engine.** Tesseract fetches its worker, WASM core and
+   language data from a third-party CDN at runtime. Versions are now pinned so a
+   CDN release cannot change recognition behaviour underneath us, but the
+   dependency remains: a blocked network, a strict corporate proxy or a CDN
+   outage breaks scanning entirely. Since recognition *is* the product, this
+   should not rest on someone else's uptime. Fixing it costs roughly 15 MB of
+   engine and language data committed to the repo — a real tradeoff, which is
+   why it is a deliberate task rather than something slipped in unmeasured.
+
+2. **Move rate limiting to shared storage.** The current limiter is in-memory,
+   so on Vercel it is per serverless instance and resets on cold start. It
+   raises the cost of casual abuse; it is not a real quota. This is a licence
+   obligation as much as an engineering one — an open, unlimited card endpoint
+   is exactly the public data feed tcgapi.dev's terms forbid. Vercel KV or
+   Upstash, plus requiring a session once accounts exist.
+
+3. **Re-check number matching against the accuracy test set.** The rebuild
+   tightened collector-number matching so a differing set total counts as a
+   mismatch. The change is conservative in the right direction and cannot newly
+   auto-accept anything, but like every other value in `docs/SCANNER.md` it has
+   never been measured against real card photos.
 
 ---
 

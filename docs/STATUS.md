@@ -419,9 +419,24 @@ That single change is the cutover, and it is reversible.
 
 Tracked in PR #1 (`https://github.com/connorrmm/PokAI/pull/1`).
 
-**Still to port:** the entire interface — scan flow, camera, reveal, portfolio,
-collection, tournaments. The OCR pipeline itself (Tesseract worker, crop
-strategy, Otsu thresholding, image hashing) is still only in `index.html`.
+**Also ported since:** the OCR pipeline itself — Tesseract worker with its
+character whitelist and single-line page mode, multi-crop strategy with
+inverted-polarity retry and full-frame fallback, canvas preprocessing, Otsu
+thresholding, perceptual hashing — plus the full identification flow and a
+working scan screen at `/preview`.
+
+Verified in a real browser: the page renders with the scan control, and with no
+camera present it surfaces the actual reason — *"Camera unavailable: Requested
+device not found"* — rather than a generic failure.
+
+**Known limitation found while testing:** Tesseract loads its engine and
+language data from a third-party CDN at runtime. Versions are now pinned, and a
+failure surfaces the real reason instead of an uncaught error, but scanning
+still depends on that CDN being reachable. Self-hosting is the fix and is
+costed in `docs/ROADMAP.md` Phase 4.
+
+**Still to port:** portfolio, collection, scan history, tournaments, and the
+reveal animation. The scan path itself is done.
 
 ## Rules for whoever edits this file next
 
