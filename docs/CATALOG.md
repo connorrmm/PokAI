@@ -67,9 +67,76 @@ Two consequences for the API design:
    card-price API. Rate limit them, and once accounts exist, require a session.
 2. No bulk export endpoint, ever — not even an internal one that could be found.
 
-**Still to read:** the Attribution, Card images, and When you cancel sections.
-Attribution may require visible credit in the app; the cancellation clause
-governs what happens to cached data if the subscription lapses.
+**Our exact architecture is blessed by name.** Their words:
+
+> "Keeping your API key server-side and proxying data to your own app's users is
+> normal architecture, not redistribution. What crosses the line is a public
+> endpoint that third parties can use as a data source."
+
+So `/api/search` is fine *provided it serves our users, not the public*. Rate
+limit it, and require a session once accounts exist.
+
+**Provenance is required, and we already do it.** "Retain our identifiers and
+timestamps so provider-sourced records stay separable (you'll want this at
+cancellation anyway)." Our schema keeps `source`, `tcgplayer_id`,
+`source_updated_at` and `synced_at` on every provider-sourced row.
+
+### Attribution — appreciated, not required
+
+Not mandatory and it does not change which plan we need. If we credit them,
+"Pricing data via TCG API" is their suggested form.
+
+**We must not state or imply** that TCG API, TCGPlayer, or any game publisher
+endorses or is affiliated with PokAI. Worth a line in the UI review before
+launch.
+
+### Card images — the copyright question, answered
+
+> "Card artwork is copyrighted by the respective game publishers — **we do not
+> and cannot grant you rights to the artwork itself.** Displaying card images in
+> your product is common industry practice, but it's your responsibility to
+> assess; you can build on our pricing data without displaying images at all."
+
+This settles what tcgapi.dev covers and what it does not. It does **not** resolve
+`docs/OPEN-QUESTIONS.md` #6 — it sharpens it. Showing card art remains Sterling's
+legal call, not a risk this vendor absorbs.
+
+Worth knowing: **the product works without card images.** Names, sets, numbers,
+rarities and prices are all available independently. That is a real fallback if
+the legal answer is uncomfortable, not a hypothetical one.
+
+### When you cancel — 30 days to delete
+
+The licence is scoped to an active subscription. On cancellation or termination
+we must stop serving provider-sourced records and **delete cached raw records
+(prices, history, catalog rows) within 30 days.**
+
+We keep what is genuinely ours: user accounts, first-party transactions, our own
+catalog mappings, formulas and derived analytics — provided those cannot be used
+to reconstruct their dataset.
+
+This drove a schema change (`supabase/migrations/0005`). Collections, scans and
+corrections now carry a first-party snapshot of card identity, and their link to
+the cached catalog is optional. A `purge_provider_data()` function performs the
+deletion, and was tested: the catalog and prices go, the user's collection
+survives with its card name, set and number intact.
+
+### No guarantees
+
+Prices are "estimates derived from public market activity", primarily TCGPlayer
+with Cardmarket as an EU supplement. No accuracy, completeness or uptime
+guarantee, no SLA, and: **"Don't make our data the sole basis for financial
+decisions."**
+
+PokAI shows collection valuations, so the app should say plainly that values are
+market estimates rather than appraisals. That sits naturally beside the existing
+rule about showing each price's source and age.
+
+### If in doubt, ask them
+
+They invite it: email before building if a use case is unclear, and "a two-line
+description of what you're making is usually enough for a definitive answer."
+Cheap insurance if the image question stays uncomfortable.
 
 **Endpoint correction, 2026-08-31.** The API base is **`https://api.tcgapi.dev/v1`**
 — an `api.` subdomain. Requests to `https://tcgapi.dev/v1/...` return **404 on

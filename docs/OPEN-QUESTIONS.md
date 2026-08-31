@@ -85,10 +85,27 @@ so everything above comes from their public pages via search, not from calling
 the API. **First job once a key exists: confirm the API actually returns what we
 need.**
 
-**6. Card images and copyright.**
-Card art is owned by The Pokémon Company. Displaying images fetched from a
-third-party API in a commercial product is a real legal question. Flag it; don't
-quietly bake in an approach that assumes it's fine.
+**6. Card images and copyright — SHARPENED 2026-08-31, still open.**
+Card art is owned by The Pokémon Company. tcgapi.dev's licence is now read and
+is explicit that it does not help here:
+
+> "Card artwork is copyrighted by the respective game publishers — we do not and
+> cannot grant you rights to the artwork itself... it's your responsibility to
+> assess; you can build on our pricing data without displaying images at all."
+
+So this is Sterling's call, not a risk the data vendor absorbs. Two things that
+make it less frightening than it sounds:
+
+1. **Images are hosted by TCGPlayer**, so we would be linking to their servers
+   rather than copying and storing Pokémon artwork ourselves. That is a
+   materially better position than hosting it.
+2. **The product works without images.** Names, sets, numbers, rarities and
+   prices all come through independently. A text-and-price version of PokAI is
+   fully functional. Worth remembering before treating this as a blocker.
+
+*Recommendation:* build image display behind a switch that can be turned off,
+so a legal answer either way does not require a rewrite. Get the legal read
+before charging money, not before writing code.
 
 **7. Accounts and data ownership.**
 No auth exists. Once collections persist, this becomes a real product with real

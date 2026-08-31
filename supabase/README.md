@@ -11,8 +11,28 @@ a lie.
   other table definitions are superseded by 0003.
 - `0003_align_schema_with_tcgapi.sql` — rebuilt against the real tcgapi.dev
   response shape after an actual API call.
-- `0004_licence_compliance_catalog_server_only.sql` — **current.** Closes client
-  access to the cached catalog and prices. See below; this one is not optional.
+- `0004_licence_compliance_catalog_server_only.sql` — closes client access to the
+  cached catalog and prices. See below; not optional.
+- `0005_survive_provider_data_purge.sql` — **current.** Lets provider data be
+  deleted without destroying users' collections.
+
+## A user's collection survives losing the data provider
+
+The licence is scoped to an active subscription: on cancellation we must delete
+cached catalog and price rows within 30 days, while keeping our own users' data.
+
+As originally built those two requirements were in direct conflict — collections
+pointed at `cards.id` with a NOT NULL foreign key, so purging the catalog would
+have deleted every user's collection.
+
+Now each collection, scan and correction stores a first-party snapshot of the
+card's identity (`card_name`, `card_set_name`, `card_number`) and its catalog
+link is optional. `purge_provider_data()` performs the deletion.
+
+Tested rather than assumed: seeded a card, a price and a user's collection row,
+ran the purge, and confirmed the catalog and prices were gone while the
+collection survived with `card_id` NULL and its snapshot intact — Charizard /
+SWSH04: Vivid Voltage / 025/185, quantity 2.
 
 ## The catalog is server-only, and must stay that way
 
