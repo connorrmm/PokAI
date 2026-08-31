@@ -396,17 +396,28 @@ against the (sandbox-blocked) upstream returned the **actual** error —
 is product rule 4 working. Firing 35 requests produced 29 upstream errors then
 429s, so the limiter trips exactly where configured.
 
-### ⚠️ Merge hazard — read before merging this branch
+### Merge safety — RESOLVED, this branch is safe to merge
 
-The live site at `pok-ai-drab.vercel.app` is served as a **static
-`index.html`**. Adding `package.json` makes Vercel detect a Next.js project, so
-**the moment this branch merges to `main`, Vercel will stop serving
-`index.html` and serve the Next.js app instead** — which is currently a
-placeholder page, not the scanner.
+There was a real hazard here and it is now fixed rather than merely documented.
 
-Do not merge until either the scanner UI is ported, or `index.html` is
-deliberately wired to keep serving at `/`. Branch previews are unaffected and
-safe.
+The live site is served as a static `index.html`. Adding `package.json` makes
+Vercel detect a Next.js project, so merging would have stopped serving that file
+and shown the rebuild's placeholder page instead — an immediate, user-visible
+regression.
+
+The fix: the single-file app moved to `public/app.html`, and a `beforeFiles`
+rewrite in `next.config.mjs` keeps `/` serving it. The rebuild lives at
+`/preview` until it is genuinely better. `beforeFiles` runs ahead of the
+filesystem, so it wins over any app-router page.
+
+Verified by running the production build locally: `/` returned 2,740,981 bytes
+titled "Pokai — Prototype", containing the never-guess fix and no truncation;
+`/preview` and both API routes returned 200/400 as expected.
+
+**When the ported UI is ready:** delete that rewrite and add `app/page.tsx`.
+That single change is the cutover, and it is reversible.
+
+Tracked in PR #1 (`https://github.com/connorrmm/PokAI/pull/1`).
 
 **Still to port:** the entire interface — scan flow, camera, reveal, portfolio,
 collection, tournaments. The OCR pipeline itself (Tesseract worker, crop
