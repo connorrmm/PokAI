@@ -1,6 +1,9 @@
 # Current status — what actually exists
 
 Last verified: **2026-08-31**, against commit `1641dfe` on `main`.
+Updated the same day with the backend question resolved and the production plan
+decided — see `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and
+`docs/SETUP-CHECKLIST.md`.
 
 Every claim in this file was checked against the repository or observed by
 running the app. Where something could not be checked, it says so and says why.
@@ -63,10 +66,14 @@ const POKAI_BACKEND_BASE = window.POKAI_BACKEND_BASE || 'http://localhost:3001';
 
 with a comment saying "see /pokai-backend". There is no `/pokai-backend`.
 
-**Sterling — this is the one thing I need from you.** If that backend exists on
-someone's laptop, in another repo, or in an old chat session, it needs to be
-found and pushed, or it is gone. It is the only work on this project I have
-found evidence of that isn't recoverable from what's here.
+**RESOLVED 2026-08-31.** Sterling confirmed: all prior work was done in Claude
+chat sessions and pasted in by hand. Claude Code was never used, and no backend
+was ever saved as real files. So there is nothing to recover — the backend gets
+built fresh. See `docs/ARCHITECTURE.md`.
+
+This is better news than it sounds. There is no half-finished server to inherit,
+debug, or trust. The first backend can be built small, deliberately, and to fit
+the plan rather than to fit whatever a chat session produced months ago.
 
 ### It said Sterling's prototype is `pokai-app.html`. The committed app is a different, older build.
 
@@ -171,6 +178,8 @@ ever been committed.
 **Not verified:** Sterling says the app is hosted on Netlify but "not connected
 right now." I could not check this — I don't have the URL, and outbound network
 access from this sandbox is restricted. **I need the Netlify URL to confirm.**
+Netlify is now the chosen deploy target for both the front end and the API — see
+`docs/ARCHITECTURE.md`.
 
 **Whatever is or isn't live, this is a real blocker:** the committed app calls
 `http://localhost:3001`. On a deployed site that fails twice over — the visitor's
@@ -210,6 +219,26 @@ client code — is the thing that keeps it fine.
 
 ---
 
+## 6b. There is no AI vision model in the scanner
+
+Verified 2026-08-31. The scanner uses **Tesseract.js** (`index.html` line 1493,
+loaded from a CDN at line 672) — a traditional optical character recognition
+engine that matches letter shapes. It is not an AI model and does not understand
+what it is looking at.
+
+There is **no** vision model, no image-recognition service, and no AI provider of
+any kind referenced anywhere in the application code. I grepped for every major
+provider and found nothing.
+
+This is the root cause of the recognition weakness described in
+`docs/SCANNER.md`. Tesseract reads a cropped strip of pixels and returns its best
+guess at the text; foil glare, stylised fonts and holo backgrounds defeat it, and
+those are exactly the high-value cards that matter most.
+
+The fix is planned in `docs/ARCHITECTURE.md` — a real vision model reading the
+card server-side, replacing the OCR step while leaving the matching, confidence
+and never-guess logic intact.
+
 ## 7. Honest summary of what is built
 
 **Real and working:** a single-file browser prototype with a genuine OCR pipeline
@@ -227,7 +256,8 @@ placeholders; leaderboards and tournaments are hardcoded fictional users.
 The OCR path and the demo path are different code. The OCR path is real.
 
 **Does not exist at all:** any backend, any database, any persistence, any
-accounts, any deployment config, any tests, any accuracy measurement.
+accounts, any deployment config, any tests, any accuracy measurement, and **any
+AI vision model** (see section 6b).
 
 ---
 

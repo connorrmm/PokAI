@@ -25,6 +25,22 @@ the backend described in earlier notes **is not in this repository and never
 has been**, and the committed `index.html` is an **older build** than the
 prototype preserved at `prototype/pokai-app-bundled.html`.
 
+## Decisions already made — do not relitigate without reason
+
+Settled 2026-08-31; reasoning in `docs/ARCHITECTURE.md`.
+
+- **Stack:** Netlify (front end + serverless API), Supabase (Postgres, auth,
+  storage), tcgapi.dev (card data + prices), Claude Haiku 4.5 (vision).
+- **Web app, not native.**
+- **Extend the prototype, don't rebuild it.** The OCR pipeline carries real
+  hard-won fixes; the missing pieces go behind it.
+- **Recognition moves to a server-side vision model.** There is no AI vision
+  model in the app today — it is Tesseract OCR.
+- **The browser never calls a third-party API directly.** It calls our API; our
+  API holds every paid key. This is what keeps keys out of a public repo.
+- **Card data is cached in our own database** and refreshed on a schedule. The
+  scan path never depends on a third party being up.
+
 ## Non-negotiable product rules
 
 1. **Never guess a card.** If confidence is below the auto-accept threshold, show
@@ -55,7 +71,9 @@ Fix this before building anything on top of the scanner.
   This project has already lost time to confident claims that turned out wrong.
 - **Say when you don't know.** Especially about live API behavior, hosting state,
   and whether something is deployed. Guessing here has burned real hours.
-- **No secrets in client code.** Any paid API key belongs server-side.
+- **No secrets in client code.** Any paid API key belongs server-side. Keys live
+  in Netlify environment variables. This repo is public — anything committed to
+  it is published to the world.
 - Ask before adding a paid dependency or a service that costs money.
 
 ## Reference docs
@@ -67,6 +85,9 @@ Read these when the task touches them; they are not needed every session.
 - `docs/SCANNER.md` — recognition pipeline: real failure modes and tuned values
 - `docs/CATALOG.md` — card database strategy and a verified naming bug
 - `docs/OPEN-QUESTIONS.md` — decisions Sterling still needs to make
+- `docs/ARCHITECTURE.md` — the stack, and why each piece was chosen
+- `docs/ROADMAP.md` — build order to production, phase by phase
+- `docs/SETUP-CHECKLIST.md` — accounts and keys Sterling must create
 - `docs/MODEL-POLICY.md` — which model to use for which work, to protect usage limits
 
 `docs/SCANNER.md` and `docs/CATALOG.md` contain findings from real testing

@@ -1,5 +1,27 @@
 # Card data
 
+## Provider decision (2026-08-31)
+
+**Chosen: tcgapi.dev.** Sterling identified it as the live API for this project.
+It covers Pokémon card data and daily market values, authenticates with an
+`X-API-Key` header, and exposes cards, sets/expansions, and pricing endpoints.
+
+Plans, as published: Free 100 requests/day, Hobby $9.99 (1K/day), Starter $19.99
+(2.5K/day), Pro $49.99 (10K/day), Business $99.99 (50K/day). **Free, Hobby and
+Starter are licensed for personal and non-commercial use only — commercial use
+starts at Pro.** PokAI is commercial, so Pro is the floor for launch. Build and
+test on Free.
+
+**Not verified by me.** tcgapi.dev is blocked by this environment's network
+egress policy; I could not reach it. Everything above comes from their public
+pages via web search, not from calling the API. Treat it as good-faith secondhand
+information until a key exists and the endpoints are confirmed to return what we
+need. That confirmation is the first task of Phase 1 in `docs/ROADMAP.md`.
+
+This replaces the earlier plan to use the free `api.pokemontcg.io`, whose
+measured ~41% reliability is documented below and is the reason we cache locally
+regardless of provider.
+
 ## Data source
 
 Verified 2026-08-31: the committed `index.html` does **not** call
@@ -27,8 +49,28 @@ verified facts:
   user's critical path.
 
 The service has since been folded into a broader commercial TCG toolkit, so its
-long-term free availability is uncertain. Worth checking current terms before
-building hard against it. Paid alternatives exist and may be worth it.
+long-term free availability is uncertain. This is part of why the project moved
+to tcgapi.dev — see the provider decision at the top of this file. The rest of
+this section is retained as historical context for how the prototype worked, not
+as a live plan.
+
+## Freshness — how "the cards update repeatedly" works
+
+Sterling's requirement is that card data updates on its own. The design is in
+`docs/ARCHITECTURE.md`; the rule that matters here:
+
+**We never call the provider on the scan path.** A nightly job refreshes prices
+into our own database and a weekly job pulls new sets and cards. The app reads
+only our copy.
+
+Three reasons, all learned the hard way and all still true with a paid provider:
+a scan stops depending on someone else's uptime; the daily request quota isn't
+burned re-fetching the same card; and new sets appear without a code change.
+
+Every stored price carries **its source and the timestamp it was fetched**, which
+is what makes product rule 2 — never fabricate a price — actually enforceable.
+When data is missing or stale, the app can say so precisely instead of showing a
+number that looks current.
 
 ## Strategy: master catalog → enabled subset → scanner
 

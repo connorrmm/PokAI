@@ -31,6 +31,30 @@ Verified 2026-08-31 against the committed `index.html`:
 None of this changes the caveat above: the numbers are implemented, but they
 still have never been measured against real card photos.
 
+## Recognition is changing (decided 2026-08-31)
+
+**There is no AI vision model in the scanner today.** Verified: it uses
+Tesseract.js (`index.html` line 1493), a traditional OCR engine that matches
+letter shapes. No vision model or AI provider of any kind appears anywhere in the
+application code.
+
+That is the root cause of most failure modes below. Tesseract reads a strip of
+pixels and guesses at the text; foil glare, stylised fonts and holo backgrounds
+defeat it — precisely the high-value cards that matter most.
+
+**The plan:** a vision model reads the card server-side and returns structured
+data (name, number, set, rarity), which is then matched against our catalog.
+Starting with Claude Haiku 4.5. Full reasoning and cost in
+`docs/ARCHITECTURE.md`.
+
+**What does not change:** everything downstream of the read — candidate ranking,
+the confidence formula, the thresholds, and the never-guess rule. That logic is
+sound; it has been fed bad text. The findings below therefore remain relevant
+after the swap, with one exception noted: OCR-specific failure modes (crop
+fractions, inverted polarity) stop applying once Tesseract is removed.
+
+Tesseract stays as an offline fallback until the vision path is proven, then goes.
+
 ## Approach used in the prototype
 
 Browser-based OCR (Tesseract.js) reading the card's name region, then a text
@@ -38,9 +62,10 @@ search against a card database, then ranking candidates by name-match quality
 with corroborating signals.
 
 This was chosen because it needs no paid service and runs entirely client-side.
-It is not necessarily the right long-term answer. A hosted image-recognition
-model would likely be more accurate and much faster, at a cost. That tradeoff
-is open — see `docs/OPEN-QUESTIONS.md`.
+It was not the right long-term answer, and that tradeoff has since been settled:
+recognition moves to a hosted vision model, as described at the top of this file.
+The section below documents the OCR prototype as built, for the failure-mode
+lessons it produced — several of which still apply after the swap.
 
 ## Failure modes that actually happened
 
@@ -121,4 +146,9 @@ the scanner has never been observed reading a real card by anyone who wrote
 these docs. Note the ordering dependency: the test set needs a card database to
 match against, and the card database needs a backend to serve it — so the
 backend comes first in build order, even though the test set is what makes every
-later change measurable.
+later change measurable. This is Phase 2 in `docs/ROADMAP.md`.
+
+It now carries a second job. With a paid vision model, the test set is also how
+we choose **which** model: Haiku 4.5 versus Sonnet 5 is a real cost difference
+per scan, and that call should be settled by measured accuracy rather than by
+assumption. Build the measurement before tuning anything.

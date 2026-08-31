@@ -25,6 +25,9 @@ docs/PRODUCT.md                   vision, MVP scope, the "never guess" rule
 docs/SCANNER.md                   recognition pipeline findings
 docs/CATALOG.md                   card database strategy
 docs/OPEN-QUESTIONS.md            decisions still to be made
+docs/ARCHITECTURE.md              the stack and why — read before building
+docs/ROADMAP.md                   build order to production
+docs/SETUP-CHECKLIST.md           accounts and keys Sterling needs to create
 docs/MODEL-POLICY.md              which AI model to use for which work
 .claude/agents/                   Sonnet-pinned helper agents
 ```
@@ -43,6 +46,16 @@ localhost, and OCR will not start.
 
 Card lookups will fail until a backend exists at `http://localhost:3001`; the app
 falls back to a 22-card offline pool. That's expected, not a bug in the page.
+
+## Where this is going
+
+The plan to production is in [`docs/ROADMAP.md`](docs/ROADMAP.md); the stack and
+the reasoning behind it are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+Short version: Netlify hosts the app and a small serverless API, Supabase holds
+the database and accounts, tcgapi.dev supplies card data and prices on a
+scheduled refresh, and a server-side vision model replaces the current OCR. About
+$50/month to run at launch, plus a few dollars per thousand scans.
 
 ## Two things to know before changing anything
 
