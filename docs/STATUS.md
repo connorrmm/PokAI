@@ -316,9 +316,27 @@ issues originating from this schema. Details in `supabase/README.md`.
 
 The database is currently **empty of real data** — all test rows were deleted.
 
-**Vercel — connected, nothing deployed.** Hobby plan, zero projects. Deliberately
-not deployed yet: publishing today would put an app live that still breaks the
-never-guess rule (section 2).
+**Vercel — connected, nothing deployed, and the API is misbehaving.** Team
+`longsterling61-4597's projects`, Hobby plan.
+
+The never-guess blocker is now fixed, so the app is deployable. What is blocking
+is a tooling problem, recorded here so the next session does not repeat it:
+
+Project creation through the Vercel API **reports success and returns a project
+id, but the project is then invisible to every read.** `get_project` returns 404
+for the returned id, and `list_projects` returns an empty array. Attempted twice
+under two names (`pokai`, `pokai-app`); identical result both times. A third
+attempt with the first name returned `409 conflict — project already exists`,
+which contradicts the 404, so at least one half-created project probably exists
+in a scope this tooling cannot enumerate.
+
+**Do not keep retrying this through the API.** It creates orphaned projects. The
+fix is to import the repo through the Vercel dashboard by hand, and to check for
+and delete any stale `pokai` / `pokai-app` projects first.
+
+Repository access was investigated as a cause and ruled out: `connorrmm` is the
+sole collaborator on the repo, and Sterling confirmed he is working from that
+account, so the GitHub side is fine.
 
 **Not built:** the API itself, the sync job, and the vision endpoint. Those are
 Phase 1 and 2 in `docs/ROADMAP.md`.

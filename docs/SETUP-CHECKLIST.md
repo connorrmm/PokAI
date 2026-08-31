@@ -13,10 +13,23 @@ Work top to bottom — items 1–4 unblock everything else.
 Sterling connected Vercel on 2026-08-31 (switching from the earlier Netlify
 plan). Account: `longsterling61-4597's projects`, on the **Hobby** plan.
 
-**Still to do:** no project exists yet, so nothing is deployed. I can create it
-and link it to `connorrmm/PokAI` — just say the word. I have deliberately not
-done it yet, because deploying today would publish an app that still breaks the
-never-guess rule (see `docs/STATUS.md`).
+**Still to do — and it needs the dashboard, not me.** Creating the project
+through Vercel's API fails in a way I cannot work around: it reports success,
+returns a project id, and the project is then unreadable (404) and absent from
+the project list. Tried twice under two names, same result each time.
+
+Do this by hand instead, about a minute:
+
+1. Go to **vercel.com/dashboard**.
+2. If a **`pokai`** or **`pokai-app`** project is listed, delete it — those are
+   half-created leftovers from the failed API attempts.
+3. **Add New → Project → Import Git Repository →** pick `connorrmm/PokAI`.
+4. Framework Preset: **Other**. Leave build command and output directory blank —
+   it is a plain HTML file with no build step.
+5. Deploy, then send me the URL.
+
+The never-guess defect that previously made deploying a bad idea is now fixed,
+so the deployed app will be honest.
 
 **Before launch you must upgrade to Vercel Pro, $20/month.** The free Hobby plan
 is licensed for non-commercial personal use only, and PokAI is commercial. Not
