@@ -1,0 +1,264 @@
+# Current status — what actually exists
+
+Last verified: **2026-08-31**, against commit `1641dfe` on `main`.
+
+Every claim in this file was checked against the repository or observed by
+running the app. Where something could not be checked, it says so and says why.
+If you are about to trust a sentence here, the "How this was verified" line at
+the end of each section tells you how far that trust should go.
+
+The previous version of this file was written without access to the repository.
+Most of it was right. The parts that were wrong were wrong in an expensive
+direction, so there is a correction log at the bottom.
+
+---
+
+## 1. The repository
+
+Public repo: `github.com/connorrmm/PokAI` — default branch `main`, created
+2026-08-04, last pushed 2026-08-29.
+
+**The entire repository is two files:**
+
+| File | Size | What it is |
+|---|---|---|
+| `index.html` | 2.74 MB / 3,421 lines | The whole prototype — markup, CSS, and ~2,650 lines of JavaScript |
+| `README.md` | 7 bytes | The text `# PokAI` |
+
+Of `index.html`'s 2.74 MB, about **2.56 MB (93%) is 14 embedded base64 images** —
+12 card photos plus a favicon and a wordmark. The actual code is roughly 180 KB.
+
+There are 11 commits. All of them were made by `connorrmm` through the GitHub
+website, not from a development machine — every message is `Add files via
+upload`, `Delete index.html`, or `Initial commit`. Only three filenames have
+ever existed in the history: `README.md`, `index.html`, and
+`pokai-prototype github.html`.
+
+**Nothing else has ever been committed.** No `package.json`, no server code, no
+database schema, no build config, no tests, no CI, no deploy config.
+
+*How this was verified:* `git log --all`, `git rev-list --objects --all` to list
+every file ever committed including deleted ones, and the GitHub API for repo
+metadata. This is solid.
+
+---
+
+## 2. Where the old status file was wrong
+
+### It said the backend "has never run." The truth is worse: it isn't here.
+
+The previous file described "an Express app with routes for search, identify,
+scan history and corrections, plus a Supabase schema and catalog-building
+scripts," and said the decision to keep, adapt, or discard it was open.
+
+That decision is not open, because **none of that code is in this repository and
+none of it ever has been.** I checked every file in every commit, including
+deleted ones. There is no backend to keep, adapt, or discard.
+
+`index.html` line 1688 refers to it as if it exists:
+
+```js
+const POKAI_BACKEND_BASE = window.POKAI_BACKEND_BASE || 'http://localhost:3001';
+```
+
+with a comment saying "see /pokai-backend". There is no `/pokai-backend`.
+
+**Sterling — this is the one thing I need from you.** If that backend exists on
+someone's laptop, in another repo, or in an old chat session, it needs to be
+found and pushed, or it is gone. It is the only work on this project I have
+found evidence of that isn't recoverable from what's here.
+
+### It said Sterling's prototype is `pokai-app.html`. The committed app is a different, older build.
+
+The handoff bundle contained a file called `pokai-app.html` (3,479 lines). The
+repository contains `index.html` (3,421 lines). They are **not the same file**,
+and the bundled one is **ahead**, not behind.
+
+The bundled version contains three pieces of work that **have never existed in
+any commit in this repository**:
+
+| Feature | Bundled `pokai-app.html` | Committed `index.html` |
+|---|---|---|
+| Retry with backoff on card lookups | `fetchCardSearch()` — 3 attempts, 350ms backoff, 12s timeout | **Absent.** One `fetch`, no retry |
+| Full candidate list on a low-confidence read | Returns every name match | **Returns nothing to pick from** |
+| Candidate list when ambiguous | Every name match, untruncated | Truncated to the top 8 |
+| Placeholder art when a card image fails | `generatePlaceholderArt()` draws an SVG | **Absent.** Card renders with no art |
+
+I have preserved the bundled file at `prototype/pokai-app-bundled.html` so it
+cannot be lost again.
+
+### The committed app violates the project's own number-one product rule.
+
+This is the most important finding in this document.
+
+`CLAUDE.md` rule 1 is "Never guess a card — if confidence is below the threshold,
+show every matching print and let the user pick." `docs/PRODUCT.md` adds that the
+list is never truncated, and that "a dead-end error is unacceptable."
+
+In the committed `index.html`, when the scanner is **not confident**, line 2148
+returns a result with no candidate list at all:
+
+```js
+return {ok:false, reason:'low_confidence', text, confidence, topGuess: top.apiCard};
+```
+
+Line 2317 only renders a picker `if(result.candidates && result.candidates.length > 0)`.
+So the user gets the dead end the product doc explicitly forbids. When the read
+is merely *ambiguous*, line 2150 caps the list at 8 (`ranked.slice(0, 8)`),
+which is the truncation the product doc also forbids.
+
+The bundled version gets both of these right. The fix already exists — it just
+isn't in git.
+
+*How this was verified:* read both files side by side at the cited line numbers,
+and confirmed with `git show <commit>:index.html` across all 11 commits that
+`fetchCardSearch` and `generatePlaceholderArt` have never appeared in this repo.
+This is solid.
+
+---
+
+## 3. What the old file got right
+
+- **Nothing persists.** Confirmed twice: there is not one reference to
+  `localStorage`, `sessionStorage`, `indexedDB`, or cookies anywhere in the file,
+  and after loading the running app I read `localStorage` directly and it was
+  empty. Reload and everything is gone. No accounts, no saved collection.
+- **The demo pool is 22 hardcoded cards.** Confirmed at runtime:
+  `CARD_POOL.length` evaluated to `22` in the live page.
+- **No authentication of any kind.** No login, signup, or password anywhere. The
+  single user is the hardcoded string `'@you'`.
+- **No tests, no CI, no rate limiting, no payments, no image storage.**
+- **Scanner accuracy has never been measured.** Still true, and still the most
+  consequential gap on the project.
+
+---
+
+## 4. What I ran, and what happened
+
+I served `index.html` over a local HTTP server and loaded it in a real headless
+Chromium browser. This is observed behaviour, not code reading.
+
+**Worked:**
+- The page loads and renders with **zero uncaught JavaScript errors**.
+- All three tabs are present and wired: `scan`, `portfolio`, `tourney`.
+- 12 of the 22 cards displayed art, from the embedded base64 photos.
+- Failures were handled gracefully — the app caught every network error and fell
+  back to its local pool instead of hanging or crashing.
+
+**Failed, and why it matters:**
+- Every card lookup hit `http://localhost:3001/api/search` and returned
+  `ERR_CONNECTION_REFUSED`. The other 10 cards rendered with **no art at all**,
+  because the placeholder generator isn't in this build.
+- Tesseract.js did not load. `typeof window.Tesseract` was `undefined`.
+
+**What I could NOT verify, and will not claim either way:**
+- **The scanner has not been proven to work by me.** Tesseract loads from a CDN
+  that is blocked in my sandbox, and there is no camera on this machine. The OCR
+  code is real and substantial — genuine crop math, an inverted-polarity retry,
+  hard timeouts on every async step, and real error text surfaced to the user —
+  but I have not seen it read a card. Do not let anyone tell you I confirmed the
+  scanner works. I confirmed the code exists and the page loads.
+- **Whether anything is deployed on Netlify.** See section 5.
+
+---
+
+## 5. Deployment — partly unresolved
+
+**Verified:** GitHub Pages is **off** (`has_pages: false` from the GitHub API).
+No `netlify.toml`, `vercel.json`, `_redirects`, or GitHub Actions workflow has
+ever been committed.
+
+**Not verified:** Sterling says the app is hosted on Netlify but "not connected
+right now." I could not check this — I don't have the URL, and outbound network
+access from this sandbox is restricted. **I need the Netlify URL to confirm.**
+
+**Whatever is or isn't live, this is a real blocker:** the committed app calls
+`http://localhost:3001`. On a deployed site that fails twice over — the visitor's
+own machine has nothing on port 3001, and a page served over HTTPS is not allowed
+to call `http://` at all (browsers block it as mixed content). So **if the site
+is live on Netlify today, its card lookups are broken**, and it is running on the
+22-card offline fallback.
+
+Also relevant: **camera access requires HTTPS.** Netlify provides that, so
+scanning can work there in a way it cannot from a local file.
+
+---
+
+## 6. Secrets — clean
+
+**No API keys, tokens, or credentials are committed.** Nothing needs to be
+rotated. This is genuinely good news.
+
+Checked: every blob in the full git history (not just the current files, so
+deleted content is covered) against high-confidence patterns for OpenAI, Stripe,
+AWS, GitHub, Google, Slack, SendGrid keys, JWTs and private keys; then a broader
+keyword sweep for `api_key`, `secret`, `password`, `token`, `bearer`,
+`authorization`, Supabase and Firebase references; then a specific check for keys
+embedded in URLs or request headers, which is the realistic way a client-side app
+leaks one.
+
+The only hits for the word "secret" are the Pokémon card rarity tier
+"Secret Rare."
+
+The only external URLs in the code are the Tesseract.js CDN, Google Fonts, and
+`http://localhost:3001`.
+
+**Worth knowing anyway: this repository is public.** Anyone can read it. That is
+fine today because there is nothing sensitive in it, but it becomes a live risk
+the moment a backend exists. The rule in `CLAUDE.md` — no paid API key ever in
+client code — is the thing that keeps it fine.
+
+---
+
+## 7. Honest summary of what is built
+
+**Real and working:** a single-file browser prototype with a genuine OCR pipeline
+(multi-crop, inverted-polarity retry, full-frame fallback, hard timeouts, real
+error messages shown to the user), real canvas thumbnail generation, real
+exact-duplicate photo detection by hash, a working confidence formula whose
+ceiling is reachable, a manual-correction picker, and three tabs of polished UI.
+
+**Simulated, by the prototype's own admission** (its architecture note at lines
+780–830 says so explicitly): the demo "add card" flow's identification is a
+seeded random pick; photo quality scores are randomised within realistic bands
+rather than measured; valuation confidence and recent-sales figures are
+placeholders; leaderboards and tournaments are hardcoded fictional users.
+
+The OCR path and the demo path are different code. The OCR path is real.
+
+**Does not exist at all:** any backend, any database, any persistence, any
+accounts, any deployment config, any tests, any accuracy measurement.
+
+---
+
+## Correction log
+
+Fixed in this rewrite, with the old claim first:
+
+1. "A schema was written; it has never been applied" → **no schema exists in this
+   repo, and none ever has.**
+2. "Backend source code that has never run... whether to keep, adapt or discard
+   it is your call" → **the code is not here; there is nothing to decide about
+   until it is found.**
+3. "`pokai-app.html`, ~3,500 lines" described as the prototype → **the committed
+   file is `index.html`, a different and older build; the bundled one is ahead on
+   three fixes.**
+4. Silent on the "never guess" regression → **now documented as the top code
+   defect.**
+5. Silent on `localhost:3001` → **now documented as the deploy blocker.**
+6. "Nothing is deployed anywhere" stated flatly → **GitHub Pages confirmed off;
+   Netlify unconfirmed and needs a URL from Sterling.**
+
+Confirmed correct and kept: nothing persists; 22 hardcoded cards; no auth; no
+tests; scanner accuracy never measured; Tesseract fails under strict CSP; camera
+needs HTTPS.
+
+---
+
+## Rules for whoever edits this file next
+
+1. Date it and name the commit you verified against.
+2. Every claim is "verified", "not verified", or "could not check — here's why."
+   There is no fourth category, and "the code looks right" is not verification.
+3. Never delete a caveat to make the picture look better. That is how this file
+   became wrong the first time.
