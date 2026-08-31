@@ -12,6 +12,28 @@ Starter are licensed for personal and non-commercial use only — commercial use
 starts at Pro.** PokAI is commercial, so Pro is the floor for launch. Build and
 test on Free.
 
+**Endpoint correction, 2026-08-31.** The API base is **`https://api.tcgapi.dev/v1`**
+— an `api.` subdomain. Requests to `https://tcgapi.dev/v1/...` return **404 on
+every path**, which Sterling confirmed by running them from his own machine.
+Notably they return 404 rather than 401, meaning the key is never even checked;
+the paths simply do not exist there.
+
+A documented example call is:
+
+```
+curl "https://api.tcgapi.dev/v1/search?q=charizard&game=pokemon" \
+  -H "X-API-Key: YOUR_API_KEY"
+```
+
+The `api.` subdomain and that `/search` shape come from their published docs via
+web search and are **still not confirmed by a successful call.** They also
+publish an AI-readable reference at `tcgapi.dev/llms/` worth pulling in full
+before the sync job is written.
+
+Caution learned here: search results mix up at least three similarly named
+services — **tcgapi.dev**, tcgapis.com and tcgapi.net. Earlier notes in this
+file may have blended their details. Trust only what a real call returns.
+
 **Not verified by me.** tcgapi.dev is blocked by this environment's network
 egress policy; I could not reach it. Everything above comes from their public
 pages via web search, not from calling the API. Treat it as good-faith secondhand
