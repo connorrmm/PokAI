@@ -26,16 +26,25 @@ Can start immediately; nothing here is blocked on Sterling.
 
 ## Phase 1 — Backend and card data. *Needs Sterling.*
 
-Blocked on: Netlify connected, Supabase account, tcgapi.dev key.
+Vercel and Supabase are connected and the database schema is live (2026-08-31).
+Remaining blocker: none for the API build; the tcgapi.dev key is in hand.
 
-1. Create the Supabase database and the tables in `docs/ARCHITECTURE.md`.
-2. Build the API on Netlify Functions: card search, card lookup, health check.
+1. ~~Create the Supabase database and tables.~~ **DONE 2026-08-31** — schema
+   applied, row-level security enabled and verified by test. See
+   `supabase/README.md`.
+2. Build the API on Vercel Functions: card search, card lookup, health check.
 3. Build the **sync job** — nightly prices, weekly new sets — writing every price
-   with its source and fetch time.
+   with its source and fetch time. Runs on Vercel Cron.
 4. Point the app at the real API and deploy it.
 
+Step 2 starts with one unglamorous task: **confirm tcgapi.dev actually returns
+what we need.** Its plans and endpoints were researched from public pages, never
+from a real call, because this environment blocks the domain. Building the sync
+job on an unverified assumption is exactly the mistake this project has already
+paid for once.
+
 **Result:** the app runs on a real URL, on a real card database, with real
-prices that refresh on their own. The camera works, because Netlify serves
+prices that refresh on their own. The camera works, because Vercel serves
 HTTPS. This is the first version worth showing anyone.
 
 ---
@@ -84,16 +93,25 @@ money changes hands, not after.
 
 | | Development | Live product |
 |---|---|---|
-| Netlify | $0 | $0 until real traffic |
+| Vercel | $0 Hobby | **$20/mo Pro — commercial licence required** |
 | Supabase | $0 | $0, then $25/mo at scale |
 | tcgapi.dev | $0 free tier | **$49.99/mo — commercial licence required** |
 | Claude vision | pennies | ~$2.50 per 1,000 scans (to be measured) |
-| **Total** | **~$0** | **~$50/mo + usage** |
+| **Total** | **~$0** | **~$70/mo + usage** |
 
-The one unavoidable cost is tcgapi.dev's Pro plan. Their Free, Hobby and Starter
-tiers are licensed for personal and non-commercial use only; PokAI is a
-commercial product, so Pro at $49.99/mo is the first tier that legally fits.
-Building and testing can happen on the free tier first.
+Two of these are licence requirements rather than capacity limits, and both bite
+at launch rather than during development:
+
+- **tcgapi.dev Pro, $49.99/mo.** Free, Hobby and Starter are licensed for
+  personal and non-commercial use only.
+- **Vercel Pro, $20/mo.** Vercel's Hobby plan is likewise non-commercial only;
+  their fair-use terms define commercial as any deployment used for financial
+  gain by anyone involved, which PokAI plainly is.
+
+That is $20/mo more than the earlier Netlify-based estimate, because Netlify's
+free tier does allow commercial use and Vercel's does not. Worth knowing; not
+worth switching back over, since $20/mo is small next to the time cost of
+changing platforms again.
 
 ---
 

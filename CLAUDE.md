@@ -29,8 +29,10 @@ prototype preserved at `prototype/pokai-app-bundled.html`.
 
 Settled 2026-08-31; reasoning in `docs/ARCHITECTURE.md`.
 
-- **Stack:** Netlify (front end + serverless API), Supabase (Postgres, auth,
+- **Stack:** Vercel (front end + serverless API), Supabase (Postgres, auth,
   storage), tcgapi.dev (card data + prices), Claude Haiku 4.5 (vision).
+  Switched from Netlify to Vercel on 2026-08-31 at Sterling's direction.
+  Vercel's free Hobby plan is non-commercial only — Pro ($20/mo) before launch.
 - **Web app, not native.**
 - **Extend the prototype, don't rebuild it.** The OCR pipeline carries real
   hard-won fixes; the missing pieces go behind it.
@@ -72,7 +74,7 @@ Fix this before building anything on top of the scanner.
 - **Say when you don't know.** Especially about live API behavior, hosting state,
   and whether something is deployed. Guessing here has burned real hours.
 - **No secrets in client code.** Any paid API key belongs server-side. Keys live
-  in Netlify environment variables. This repo is public — anything committed to
+  in Vercel environment variables. This repo is public — anything committed to
   it is published to the world.
 - Ask before adding a paid dependency or a service that costs money.
 
@@ -111,6 +113,19 @@ Keep on Opus regardless of how mechanical it looks: recognition and confidence
 logic, anything touching the "never guess" rule, security, and anything
 involving secrets, auth, or money. Being quietly wrong about those is expensive
 and hard to notice.
+
+## Live infrastructure
+
+- **Supabase project `yycsgtsvkhguzihyxtur`** (`us-east-2`, Postgres 17) is real
+  and the schema is applied. Migrations live in `supabase/migrations/` — if you
+  change the database, add a migration there too.
+- Row-level security is on for every table and was verified by test. **Re-run
+  those tests after any policy change** (`supabase/README.md`) — an RLS mistake
+  is silent, and the failure mode is one user seeing another's collection.
+- **Vercel is connected but has no project.** Nothing is deployed anywhere.
+- **tcgapi.dev has never been successfully called.** A key exists, but the
+  sandbox blocks the domain. Treat every documented detail about it as
+  unverified until a real request succeeds.
 
 ## Repository facts worth not re-deriving
 

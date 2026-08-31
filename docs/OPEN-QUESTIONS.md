@@ -16,10 +16,9 @@ pasted into the single HTML file by hand; Claude Code was never used. Nothing to
 recover, nothing to migrate. The backend gets built fresh per
 `docs/ARCHITECTURE.md`. **Closed.**
 
-**0b. What is the Netlify URL? (NEW)**
-Sterling believes the app is hosted on Netlify. I could not verify this. If a
-site is live, its card lookups are certainly broken, because the committed app
-calls `http://localhost:3001`.
+**0b. Is anything deployed? — ANSWERED 2026-08-31: no.**
+Sterling moved from Netlify to Vercel and connected it. The Vercel account holds
+zero projects and GitHub Pages is off, so nothing is live. **Closed.**
 
 **1. Web app or native mobile app? — DECIDED 2026-08-31: web app.**
 It runs on every phone with no app-store review, deploys in seconds, and the
@@ -42,11 +41,15 @@ without rewriting it. Revisit if and when the single file becomes the thing
 slowing work down.
 
 **3. Where does it get hosted, and who pays?**
-Sterling has a Netlify account and believes something is deployed there; this
-could not be verified — see question 0b. GitHub Pages is confirmed off. Netlify
-remains the path of least resistance for the front end and is free at this
-scale; the open part is the backend and database, which Netlify does not
-provide in the form this project needs. Anything with a database and server needs
+**DECIDED 2026-08-31: Vercel + Supabase.** Both are connected, and the database
+is built and secured. Vercel hosts the front end and the API; Supabase is the
+database and handles logins.
+
+*Cost, now concrete:* ~$70/month at launch — Vercel Pro $20, tcgapi.dev Pro
+$49.99, Supabase free until scale — plus roughly $2.50 per 1,000 scans. **$0
+during development.** Both Vercel Pro and tcgapi.dev Pro are licence
+requirements rather than capacity ones: each vendor's free tier forbids
+commercial use. **Closed.** Anything with a database and server needs
 a real hosting decision and a real (probably small, but nonzero) monthly cost.
 He needs to approve spending before it's incurred.
 

@@ -19,6 +19,7 @@ checked, what wasn't, and why.
 ```
 index.html                        the prototype — the whole app, one file
 prototype/pokai-app-bundled.html  a NEWER build than index.html (see STATUS.md §2)
+supabase/migrations/              live database schema (applied 2026-08-31)
 CLAUDE.md                         project rules and context for Claude Code
 docs/STATUS.md                    what actually exists — start here
 docs/PRODUCT.md                   vision, MVP scope, the "never guess" rule
@@ -52,10 +53,15 @@ falls back to a 22-card offline pool. That's expected, not a bug in the page.
 The plan to production is in [`docs/ROADMAP.md`](docs/ROADMAP.md); the stack and
 the reasoning behind it are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Short version: Netlify hosts the app and a small serverless API, Supabase holds
+Short version: Vercel hosts the app and a small serverless API, Supabase holds
 the database and accounts, tcgapi.dev supplies card data and prices on a
 scheduled refresh, and a server-side vision model replaces the current OCR. About
-$50/month to run at launch, plus a few dollars per thousand scans.
+$70/month to run at launch, plus a few dollars per thousand scans. $0 while
+building.
+
+**The database is built.** Supabase schema is live and row-level security is
+verified — see [`supabase/README.md`](supabase/README.md). Nothing is deployed
+yet.
 
 ## Two things to know before changing anything
 

@@ -8,18 +8,22 @@ Work top to bottom — items 1–4 unblock everything else.
 
 ---
 
-## 1. Connect Netlify to the GitHub repo — **free, ~5 minutes**
+## 1. Vercel — **connected, but no project yet**
 
-Sterling has a Netlify account but it isn't connected to this repo.
+Sterling connected Vercel on 2026-08-31 (switching from the earlier Netlify
+plan). Account: `longsterling61-4597's projects`, on the **Hobby** plan.
 
-In Netlify: **Add new site → Import an existing project → GitHub →** pick
-`connorrmm/PokAI`. There's no build command and no build directory — it's a
-plain HTML file, so leave those blank.
+**Still to do:** no project exists yet, so nothing is deployed. I can create it
+and link it to `connorrmm/PokAI` — just say the word. I have deliberately not
+done it yet, because deploying today would publish an app that still breaks the
+never-guess rule (see `docs/STATUS.md`).
 
-**Then send me the URL it gives you.** I need it to confirm what's actually live.
+**Before launch you must upgrade to Vercel Pro, $20/month.** The free Hobby plan
+is licensed for non-commercial personal use only, and PokAI is commercial. Not
+needed while building.
 
 *Why:* the camera only works over HTTPS. Opening the file locally will never
-allow scanning. This also gets us a real link to share.
+allow scanning.
 
 ---
 
@@ -30,7 +34,7 @@ Save the database password somewhere safe.
 
 You'll get a project URL and two keys. **Send me the URL and the key labelled
 `anon`. Do not send the one labelled `service_role`** — that one is a master key
-and it goes straight into Netlify's settings, not into a chat message.
+and it goes straight into Vercel's settings, not into a chat message.
 
 *Why:* this is the database. It's what makes collections survive closing the
 app, and it handles logins.
@@ -69,7 +73,7 @@ doesn't, I'll tell you and we'll pick a different provider.
 Sign up at console.anthropic.com, add a payment method, and create an API key.
 Set a monthly spend limit — start at $20 so it cannot surprise you.
 
-**Send me nothing.** This key goes directly into Netlify's environment settings.
+**Send me nothing.** This key goes directly into Vercel's environment settings.
 
 *Why:* this is the AI that actually reads the card. There is no AI vision model
 in the app today — it uses old-fashioned text recognition, which is why holo and
@@ -82,25 +86,27 @@ scans, which I'll confirm by measurement before we turn it on.
 
 ## Where keys go
 
-Anything paid or powerful goes into **Netlify → Site settings → Environment
-variables**, never into the code. This repo is public — anything committed to it
+Anything paid or powerful goes into **Vercel → Project Settings → Environment Variables**, never into the code. This repo is public — anything committed to it
 can be read by anyone.
 
-Safe to send me in chat: the Netlify URL, the Supabase project URL, the Supabase
+Safe to send me in chat: the Vercel URL, the Supabase project URL, the Supabase
 `anon` key.
 
 **Never send in chat:** the Supabase `service_role` key, the tcgapi.dev key, the
-Anthropic key. Put those in Netlify directly. If one is ever pasted somewhere it
-shouldn't be, say so and we rotate it — that's a five-minute fix, and it is much
-cheaper than the alternative.
+Anthropic key. Put those in Vercel directly.
+
+**This already happened once.** On 2026-08-31 the Anthropic and tcgapi.dev keys
+were pasted into chat. Sterling judged the risk acceptable and chose not to
+rotate them. Recording it here so the decision is visible rather than forgotten,
+and so that if either key ever behaves oddly, this is the first thing to check.
+Neither key was ever written to this repository.
 
 ---
 
 ## Questions only Sterling can answer
 
-1. **Is anything already live on Netlify?** If so I need the URL. If a site is up
-   today, its card lookups are broken — it's calling an address that only exists
-   on a developer's own laptop.
+1. ~~Is anything already live?~~ **ANSWERED** — no. The Vercel account has zero
+   projects, and GitHub Pages is off. Nothing is deployed anywhere.
 2. **What does "condition tracking" mean?** It's listed as MVP but never defined.
    Does the user pick a grade from a list? Do we assess it from the photo? Do we
    integrate with a grading service? The first is a day's work; the last is a

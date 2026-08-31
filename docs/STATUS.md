@@ -165,7 +165,7 @@ Chromium browser. This is observed behaviour, not code reading.
   hard timeouts on every async step, and real error text surfaced to the user —
   but I have not seen it read a card. Do not let anyone tell you I confirmed the
   scanner works. I confirmed the code exists and the page loads.
-- **Whether anything is deployed on Netlify.** See section 5.
+- **Whether anything is deployed.** Now answered — see section 5.
 
 ---
 
@@ -175,20 +175,24 @@ Chromium browser. This is observed behaviour, not code reading.
 No `netlify.toml`, `vercel.json`, `_redirects`, or GitHub Actions workflow has
 ever been committed.
 
-**Not verified:** Sterling says the app is hosted on Netlify but "not connected
-right now." I could not check this — I don't have the URL, and outbound network
-access from this sandbox is restricted. **I need the Netlify URL to confirm.**
-Netlify is now the chosen deploy target for both the front end and the API — see
-`docs/ARCHITECTURE.md`.
+**ANSWERED 2026-08-31: nothing is deployed anywhere.** Sterling switched from
+Netlify to **Vercel** and connected it. I checked the Vercel account directly —
+team `longsterling61-4597's projects`, Hobby plan — and it contains **zero
+projects**. Combined with GitHub Pages being off, no PokAI site is live on the
+internet today.
 
-**Whatever is or isn't live, this is a real blocker:** the committed app calls
+Vercel is now the deploy target for both the front end and the API. Its Hobby
+plan is licensed for non-commercial use only, so Pro at $20/month is required
+before launch. See `docs/ARCHITECTURE.md`.
+
+**This remains a real blocker before any deploy:** the committed app calls
 `http://localhost:3001`. On a deployed site that fails twice over — the visitor's
 own machine has nothing on port 3001, and a page served over HTTPS is not allowed
 to call `http://` at all (browsers block it as mixed content). So **if the site
-is live on Netlify today, its card lookups are broken**, and it is running on the
-22-card offline fallback.
+were deployed as-is today, its card lookups would be broken**, and it would run
+on the 22-card offline fallback.
 
-Also relevant: **camera access requires HTTPS.** Netlify provides that, so
+Also relevant: **camera access requires HTTPS.** Vercel provides that, so
 scanning can work there in a way it cannot from a local file.
 
 ---
@@ -277,13 +281,52 @@ Fixed in this rewrite, with the old claim first:
    defect.**
 5. Silent on `localhost:3001` → **now documented as the deploy blocker.**
 6. "Nothing is deployed anywhere" stated flatly → **GitHub Pages confirmed off;
-   Netlify unconfirmed and needs a URL from Sterling.**
+   deployment target moved to Vercel and confirmed to have zero projects.**
 
 Confirmed correct and kept: nothing persists; 22 hardcoded cards; no auth; no
 tests; scanner accuracy never measured; Tesseract fails under strict CSP; camera
 needs HTTPS.
 
 ---
+
+## 8. Live infrastructure — built and verified 2026-08-31
+
+This section is new because, for the first time, PokAI has infrastructure that
+actually exists.
+
+**Supabase — built, secured, tested.** Project `yycsgtsvkhguzihyxtur`,
+`us-east-2`, Postgres 17, healthy. Eight tables: `card_sets`, `cards`,
+`card_prices`, `sync_runs`, `profiles`, `collections`, `scans`, `corrections`.
+Schema is version controlled in `supabase/migrations/`.
+
+Row-level security is on for every table, and was **verified by experiment
+rather than assumed.** With two users' data really in the database:
+
+| Test | Result |
+|---|---|
+| Logged-out visitor reads the catalog | allowed — intended, it's public data |
+| Logged-out visitor reads collections and scans | **0 rows** |
+| User A reads collections while user B has data | **only A's own row** |
+| User A writes a row owned by user B | **blocked** |
+
+Supabase's own security linter reported one ERROR and two warnings on my first
+attempt — a view that would have bypassed user permissions, and a signup
+function callable over the public API. Both are fixed and the linter is clean of
+issues originating from this schema. Details in `supabase/README.md`.
+
+The database is currently **empty of real data** — all test rows were deleted.
+
+**Vercel — connected, nothing deployed.** Hobby plan, zero projects. Deliberately
+not deployed yet: publishing today would put an app live that still breaks the
+never-guess rule (section 2).
+
+**Not built:** the API itself, the sync job, and the vision endpoint. Those are
+Phase 1 and 2 in `docs/ROADMAP.md`.
+
+**Still unverified:** tcgapi.dev. This environment's network policy blocks the
+domain, so despite now holding a key I have not been able to make a single real
+call. Everything in `docs/CATALOG.md` about its endpoints and plans is from
+public pages, not from the API. **Confirming it is the first task of Phase 1.**
 
 ## Rules for whoever edits this file next
 
