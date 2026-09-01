@@ -320,6 +320,15 @@ The database is currently **empty of real data** — all test rows were deleted.
 `main` of `connorrmm/PokAI`, created through the dashboard after the API route
 failed.
 
+**Build configuration hazard, fixed the same day.** The project was created with
+Framework Preset "Other" and a blank build command, which was correct while the
+repo was a single HTML file. Once the Next.js rebuild merged that setting became
+actively harmful: Vercel would serve files without building, so the API routes
+would not exist, and because `index.html` moved to `public/app.html` the site
+would 404 at the root. `vercel.json` now pins `"framework": "nextjs"`, which
+takes precedence over the dashboard preset. Any project created from this repo
+now builds correctly regardless of how its preset was set.
+
 **Verification status, stated precisely:** I could not load the site. This
 environment's egress proxy blocks `vercel.app`, so both `curl` and a fetch
 returned nothing. What I did verify is that local `main`, remote `main` and the

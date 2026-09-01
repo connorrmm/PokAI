@@ -24,8 +24,16 @@ Do this by hand instead, about a minute:
 2. If a **`pokai`** or **`pokai-app`** project is listed, delete it — those are
    half-created leftovers from the failed API attempts.
 3. **Add New → Project → Import Git Repository →** pick `connorrmm/PokAI`.
-4. Framework Preset: **Other**. Leave build command and output directory blank —
-   it is a plain HTML file with no build step.
+4. Framework Preset: **Next.js**. Leave the build and output settings on their
+   defaults.
+
+   **Correction, 2026-08-31:** this step previously said to choose "Other" with
+   a blank build command. That was right when the repo was a single HTML file
+   and became wrong the moment the Next.js rebuild merged — with "Other" saved,
+   Vercel serves files without building, so the API routes do not exist and,
+   since `index.html` moved into `public/`, the site 404s entirely.
+   `vercel.json` now pins `"framework": "nextjs"`, which overrides the dashboard
+   setting, so a project created either way builds correctly.
 5. Deploy, then send me the URL.
 
 The never-guess defect that previously made deploying a bad idea is now fixed,
