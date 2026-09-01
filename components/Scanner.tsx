@@ -25,6 +25,7 @@ function priceAge(c: ApiCard): string | null {
 
 export default function Scanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const guideRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState('');
@@ -68,23 +69,81 @@ export default function Scanner() {
     }
   }
 
+  /**
+   * Map the on-screen guide rectangle to native video pixels, accounting for
+   * object-fit: cover scaling.
+   *
+   * This is why scanning works at all. OCR crops the top ~24% of the image
+   * looking for the card's name. If we hand it the whole camera frame, that
+   * top 24% is ceiling and wall, not the card -- so it reads nothing no matter
+   * how good the photo is. Cropping to the guide first is what puts the name
+   * where the reader expects it.
+   */
+  function getGuideVideoRect(): { x: number; y: number; w: number; h: number } | null {
+    const video = videoRef.current;
+    const guide = guideRef.current;
+    if (!video || !guide || !video.videoWidth || !video.videoHeight) return null;
+
+    const videoBox = video.getBoundingClientRect();
+    const guideBox = guide.getBoundingClientRect();
+    if (videoBox.width === 0 || videoBox.height === 0) return null;
+
+    const coverScale = Math.max(videoBox.width / video.videoWidth, videoBox.height / video.videoHeight);
+    const renderedW = video.videoWidth * coverScale;
+    const renderedH = video.videoHeight * coverScale;
+    const cropOffsetX = (renderedW - videoBox.width) / 2;
+    const cropOffsetY = (renderedH - videoBox.height) / 2;
+
+    // Pad outward before mapping. Real-world alignment is never pixel-perfect,
+    // and a tight crop that clips the TOP edge cuts the name off before OCR
+    // ever sees it -- the one failure that cannot be recovered from.
+    const PAD = 0.22;
+    const padX = guideBox.width * PAD, padY = guideBox.height * PAD;
+    const guideDisplayX = (guideBox.left - videoBox.left) - padX;
+    const guideDisplayY = (guideBox.top - videoBox.top) - padY;
+    const guideW = guideBox.width + padX * 2, guideH = guideBox.height + padY * 2;
+
+    const srcX = Math.max(0, (guideDisplayX + cropOffsetX) / coverScale);
+    const srcY = Math.max(0, (guideDisplayY + cropOffsetY) / coverScale);
+    const srcW = Math.min(video.videoWidth - srcX, guideW / coverScale);
+    const srcH = Math.min(video.videoHeight - srcY, guideH / coverScale);
+    if (srcW < 20 || srcH < 20) return null;
+    return { x: srcX, y: srcY, w: srcW, h: srcH };
+  }
+
   async function capture() {
     const video = videoRef.current;
-    if (!video) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const full = canvas.toDataURL('image/jpeg', 0.92);
-    setPhoto(full);
+    if (!video || !video.videoWidth) return;
+
+    // The full frame, kept as a safety net: if the guided crop itself was
+    // misaligned, OCR retries against this.
+    const fullCanvas = document.createElement('canvas');
+    fullCanvas.width = video.videoWidth;
+    fullCanvas.height = video.videoHeight;
+    fullCanvas.getContext('2d')?.drawImage(video, 0, 0);
+    const full = fullCanvas.toDataURL('image/jpeg', 0.92);
+
+    // The guided crop: just the card, background removed.
+    let cardPhoto = full;
+    try {
+      const r = getGuideVideoRect();
+      if (r) {
+        const c = document.createElement('canvas');
+        c.width = r.w; c.height = r.h;
+        c.getContext('2d')?.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+        cardPhoto = c.toDataURL('image/jpeg', 0.92);
+      }
+    } catch (e) {
+      console.warn('Guided crop failed, using full frame:', e);
+    }
+
+    setPhoto(cardPhoto);
     stopCamera();
     setPhase('working');
     setStatus('Reading card…');
 
     try {
-      const result = await identifyCard({ cardPhoto: full, fullFrame: full });
+      const result = await identifyCard({ cardPhoto, fullFrame: full });
       setOutcome(result);
       setPhase('result');
     } catch (e) {
@@ -118,9 +177,30 @@ export default function Scanner() {
 
       {phase === 'camera' && (
         <div>
-          <video ref={videoRef} playsInline muted style={{
-            width: '100%', borderRadius: 12, background: '#000', aspectRatio: '3/4', objectFit: 'cover',
-          }} />
+          <div style={{ position: 'relative' }}>
+            <video ref={videoRef} playsInline muted style={{
+              width: '100%', borderRadius: 12, background: '#000',
+              aspectRatio: '3/4', objectFit: 'cover', display: 'block',
+            }} />
+            {/* The card guide. Not decoration -- the capture is cropped to it,
+                which is what lets OCR find the name. */}
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex',
+              alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+            }}>
+              <div ref={guideRef} style={{
+                width: '62%', aspectRatio: '63/88',
+                border: '3px solid rgba(57,169,255,0.9)', borderRadius: 12,
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.35)',
+              }} />
+            </div>
+            <div style={{
+              position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center',
+              fontSize: 13, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.8)', pointerEvents: 'none',
+            }}>
+              Fill the frame with the card
+            </div>
+          </div>
           <button onClick={capture} style={{ ...btn, marginTop: 12 }}>Capture</button>
           <button onClick={() => { stopCamera(); setPhase('idle'); }} style={ghost}>Cancel</button>
         </div>
