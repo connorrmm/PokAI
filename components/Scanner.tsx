@@ -175,8 +175,17 @@ function ResultView({ outcome, photo, onRetake }: {
         return `Read “${outcome.text}” but found no matching card. Try searching manually.`;
       case 'ocr_unavailable':
         return 'Could not load the recognition engine (offline?). Search for the card manually.';
-      default:
+      default: {
+        // A missing server key is a setup problem, not a scanning problem.
+        // Saying so plainly saves whoever is testing from chasing the camera
+        // or the photo when the real fault is one unset config value.
+        if (detail && detail.includes('TCGAPI_KEY')) {
+          return 'The card database is not configured on the server yet, so this scan could not look anything up. '
+            + 'Set TCGAPI_KEY in the hosting environment variables and redeploy. '
+            + 'Nothing is wrong with your photo or the camera.';
+        }
         return 'Something went wrong while scanning — not just a low-confidence read.';
+      }
     }
   })();
 
