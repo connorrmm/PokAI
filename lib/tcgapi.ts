@@ -11,31 +11,11 @@
  */
 import 'server-only';
 import type { ApiCard } from './scanner/types';
+import { normaliseCard, type TcgApiCard } from './tcgapi-normalise';
+
+export { normaliseCard };
 
 const BASE = 'https://api.tcgapi.dev/v1';
-
-/** Raw shape returned by tcgapi.dev, from an observed response. */
-interface TcgApiCard {
-  id: number;
-  name: string;
-  clean_name?: string;
-  number?: string;
-  rarity?: string;
-  tcgplayer_id?: number;
-  product_type?: string;
-  foil_only?: number;
-  total_listings?: number;
-  game_name?: string;
-  game_slug?: string;
-  set_name?: string;
-  printing?: string;
-  market_price?: number;
-  low_price?: number;
-  median_price?: number;
-  lowest_with_shipping?: number;
-  price_updated_at?: string;
-  image_url?: string;
-}
 
 export class TcgApiError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) {
@@ -94,23 +74,6 @@ async function fetchWithRetry(url: string, maxAttempts = 3): Promise<Response> {
   throw lastErr instanceof Error
     ? lastErr
     : new TcgApiError('Card database unreachable', 503);
-}
-
-/** Normalise into our own card shape so nothing downstream knows the provider. */
-export function normaliseCard(c: TcgApiCard): ApiCard {
-  return {
-    id: c.id,
-    name: c.name,
-    number: c.number ?? null,
-    rarity: c.rarity ?? null,
-    setName: c.set_name ?? null,
-    printing: c.printing ?? null,
-    imageUrl: c.image_url ?? null,
-    marketPrice: typeof c.market_price === 'number' ? c.market_price : null,
-    // Provider's own timestamp: when the price was true, NOT when we fetched.
-    // The UI shows this so a stale price can be shown honestly.
-    priceUpdatedAt: c.price_updated_at ?? null,
-  };
 }
 
 export async function searchCards(query: string, limit = 40): Promise<ApiCard[]> {

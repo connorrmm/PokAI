@@ -234,3 +234,32 @@ describe('image maths', () => {
     expect(toGray(255, 0, 0)).toBe(76);
   });
 });
+
+describe('API response stays readable by the live single-file app', () => {
+  // The app served at '/' is still the real product and consumes /api/search.
+  // It reads set.name and images.small. Dropping those does not error -- it
+  // silently degrades every card to "Unknown Set" with no art and no image
+  // signal, which is exactly the kind of quiet regression this project keeps
+  // getting bitten by. Lock the contract down.
+  it('normaliseCard emits BOTH the flat and the nested shapes', async () => {
+    const { normaliseCard } = await import('../lib/tcgapi-normalise');
+    const raw = {
+      id: 21939, name: 'Charizard', number: '025/185', rarity: 'Rare',
+      set_name: 'SWSH04: Vivid Voltage', printing: 'Normal',
+      market_price: 3.68, price_updated_at: '2026-08-31T07:18:27.028Z',
+      image_url: 'https://product-images.tcgplayer.com/fit-in/400x400/226395.jpg',
+    };
+    const c = normaliseCard(raw as any);
+
+    // New app reads these
+    expect(c.setName).toBe('SWSH04: Vivid Voltage');
+    expect(c.imageUrl).toContain('tcgplayer.com');
+    expect(c.marketPrice).toBe(3.68);
+    expect(c.priceUpdatedAt).toBe('2026-08-31T07:18:27.028Z');
+
+    // Old app reads these
+    expect(c.set?.name).toBe('SWSH04: Vivid Voltage');
+    expect(c.images?.small).toContain('tcgplayer.com');
+    expect(c.images?.large).toContain('tcgplayer.com');
+  });
+});

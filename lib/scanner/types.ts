@@ -10,6 +10,22 @@ export interface ApiCard {
   marketPrice?: number | null;
   /** When the PROVIDER says this price was true -- not when we fetched it. */
   priceUpdatedAt?: string | null;
+
+  /**
+   * Compatibility shape for the original single-file app, which is still the
+   * LIVE product at '/' and consumes this same endpoint. It reads
+   * `set.name` and `images.small` rather than the flat fields above.
+   *
+   * Changing the response shape without these silently degraded the live app:
+   * every card showed "Unknown Set", card art disappeared, and the
+   * image-similarity signal was skipped entirely because `images` was
+   * undefined. Nothing errored -- it just quietly got worse, which is the
+   * failure mode this project keeps being bitten by.
+   *
+   * Remove only once '/' no longer serves public/app.html.
+   */
+  set?: { name: string | null } | null;
+  images?: { small: string | null; large: string | null } | null;
 }
 
 export interface RankedCandidate {
