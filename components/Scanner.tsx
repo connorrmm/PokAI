@@ -388,7 +388,9 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
       ['Read by', d.ocrStrategy?.startsWith('vision') ? 'AI vision model' : 'On-device OCR'],
       ['How legible the card was', vision.legibility],
       ['Model certainty of the name', `${vision.confidence}%`],
+      ['Certainty of the card number', `${vision.number_confidence}%`],
       ['Set read', vision.set_name ?? '(not readable)'],
+      ['Certainty of the set', `${vision.set_confidence}%`],
       ['Rarity read', vision.rarity ?? '(not readable)'],
       ...(vision.alternate_names.length
         ? ([['Other possible names', vision.alternate_names.join(', ')]] as Array<[string, string]>) : []),

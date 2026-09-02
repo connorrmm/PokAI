@@ -467,7 +467,55 @@ costed in `docs/ROADMAP.md` Phase 4.
 **Still to port:** portfolio, collection, scan history, tournaments, and the
 reveal animation. The scan path itself is done.
 
-## 10. Where to resume — as of 2026-09-01, end of day
+## 10. THE SCANNER WORKS — first successful identification, 2026-09-02
+
+A real Eevee ex, photographed normally on a phone, was identified outright:
+
+> **Identified, 99% confidence — Eevee ex 075/131, SV: Prismatic Evolutions,
+> Double Rare, $5.81**
+
+The model's own description of the photo: *"soft/blurred and the foil texture
+washes out the lower text."* It read the name, HP, ability, attack and
+collector number anyway, and matched the exact print out of five sharing the
+name.
+
+This is the first time in this project's history that a card has been
+identified from a real photograph.
+
+### Measured cost — my estimate was wrong
+
+**$0.0268 per scan** (2,607 input / 551 output tokens, claude-opus-5), 10.2s.
+
+That is **$26.80 per 1,000 scans**, against the ~$12 I estimated in
+`docs/ARCHITECTURE.md`. The estimate was out by more than double, and the
+reason is instructive: output tokens cost 5x input on this model, and the
+551 output tokens are far more than a short structured card record needs.
+Adaptive thinking is on by default on Opus 5, and card reading is an extraction
+task rather than a reasoning one.
+
+Untested levers, in order of likely value: lower `effort`, a shorter `notes`
+field, and a cheaper model. Same-photo comparisons are the way to choose -
+see `docs/ROADMAP.md`.
+
+### What made it work
+
+Two changes, both driven by real scans rather than reasoning:
+
+1. **Number and set together resolve a print.** Every print shares the card
+   name, so name score can never break the tie, and three different cards carry
+   075/131. Their intersection leaves exactly one.
+2. **Only signals the model is SURE of may resolve it.** An earlier scan
+   reported the number as *"tentative rather than confirmed"* and the set as
+   *"inferred from the artwork rather than a clearly legible set symbol"*.
+   Treating those as facts would have auto-accepted one of three cards priced
+   $5.81, $8.86 and $26.76. The model now reports per-field certainty and only
+   signals above 80 may identify a card outright.
+
+The second is the more important lesson: the model was already telling us how
+sure it was, in prose, and the code ignored it. Asking for that certainty as
+structured data turned an overconfident guess into a correct answer.
+
+## 11. Where to resume — as of 2026-09-01, end of day
 
 **One blocker, and it is not code: the Anthropic API account has no credit.**
 

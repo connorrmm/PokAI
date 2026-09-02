@@ -34,8 +34,12 @@ export const CardReadSchema = z.object({
     .describe('Other plausible readings if the name is unclear, best first. Empty if confident.'),
   number: z.string().nullable()
     .describe('Collector number as printed, e.g. "025/185". Null if unreadable.'),
+  number_confidence: z.number().min(0).max(100)
+    .describe('How certain you are of the collector number specifically, 0-100. If the digits were small, blurred or guessed from context, say so with a low number. 0 if you did not read it.'),
   set_name: z.string().nullable()
     .describe('Set name if legible or identifiable from the set symbol. Null if not.'),
+  set_confidence: z.number().min(0).max(100)
+    .describe('How certain you are of the SET specifically, 0-100. Reading a clear set symbol or code deserves a high number; inferring the set from artwork style deserves a low one. 0 if unknown.'),
   rarity: z.string().nullable()
     .describe('Rarity if determinable, e.g. "Rare Holo", "Illustration Rare". Null if not.'),
   hp: z.string().nullable().describe('Printed HP value, or null.'),
@@ -62,9 +66,18 @@ Rules that matter more than being helpful:
    collection and their valuation.
 2. If the name could be more than one card, put your best reading in "name" and
    the other plausible readings in "alternate_names". Do not silently pick one.
-3. "confidence" is about the NAME specifically. Be calibrated and honest -- an
-   accurate 45 is far more valuable to us than an optimistic 90, because the app
-   uses this number to decide whether to ask the user to confirm.
+3. Confidence fields are per-field and must be calibrated independently. An
+   accurate 45 is far more valuable than an optimistic 90, because the app uses
+   these numbers to decide whether to ask the user to confirm.
+   - "confidence" is about the NAME.
+   - "number_confidence" is about the COLLECTOR NUMBER. Small blurred digits you
+     half-guessed deserve a low score even when the name is obvious.
+   - "set_confidence" is about the SET. Reading a clear set symbol or code is
+     high; inferring the set from artwork style is low, however plausible it
+     feels.
+   These matter more than they look: many cards share a name AND a number across
+   different sets, so the app relies on your number and set certainty to decide
+   whether it may identify a card outright or must ask the user to choose.
 4. Use every clue, not just the text: the artwork, the set symbol, the card
    layout and era, the energy type, the HP. A blurred name over recognisable
    art is still identifiable.

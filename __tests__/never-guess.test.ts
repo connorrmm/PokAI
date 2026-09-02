@@ -331,3 +331,57 @@ describe('two independent signals identify one print (real Eevee ex scan)', () =
     expect(pricey.ok).toBe(false);
   });
 });
+
+describe('a card is resolved only on signals the model is SURE of', () => {
+  // Second real scan of the same Eevee ex. The model read the same number and
+  // set, but reported them honestly as uncertain: "the collector number is very
+  // small and blurred; it appears to read 075/131, so treat that as tentative
+  // rather than confirmed" and "set inferred from the card's contents and
+  // crystal/rainbow artwork rather than a clearly legible set symbol".
+  //
+  // Three cards share 075/131 at $5.81, $8.86 and $26.76. Accepting on a
+  // guessed number would give a wrong card AND a wrong valuation, quietly.
+  const eevee = (id: number, number: string, setName: string, price: number): ApiCard =>
+    ({ id, name: 'Eevee ex', number, setName, marketPrice: price });
+
+  const ranked5: RankedCandidate[] = [
+    { apiCard: eevee(1, '075/131', 'SV: Prismatic Evolutions', 5.81), score: 95 },
+    { apiCard: eevee(3, '075/131', 'Prize Pack Series Cards', 26.76), score: 95 },
+    { apiCard: eevee(4, '075/131', 'Miscellaneous Cards & Products', 8.86), score: 95 },
+  ];
+
+  const FLOOR = 80;
+  const resolves = (numberConf: number, setConf: number) => numberConf >= FLOOR && setConf >= FLOOR;
+
+  it('a clearly READ number and set resolve the card', () => {
+    expect(resolves(95, 90)).toBe(true);
+    const out = decide({
+      text: 'Eevee ex', ranked: ranked5, confidence: 94, topValue: 5.81,
+      numberMatch: true, uniquelyResolved: true,
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('a TENTATIVE number does not resolve it, however obvious the name', () => {
+    expect(resolves(45, 90)).toBe(false);
+    const out = decide({
+      text: 'Eevee ex', ranked: ranked5, confidence: 94, topValue: 5.81,
+      numberMatch: null, uniquelyResolved: false,
+    });
+    expect(out.ok).toBe(false);
+    expect((out as any).candidates.length).toBeGreaterThan(1);
+  });
+
+  it('a set INFERRED from artwork does not resolve it either', () => {
+    expect(resolves(95, 40)).toBe(false);
+  });
+
+  it('the user still gets every option when a signal is shaky', () => {
+    const out = decide({
+      text: 'Eevee ex', ranked: ranked5, confidence: 94, topValue: 5.81,
+      uniquelyResolved: false,
+    });
+    if (out.ok) throw new Error('should not auto-accept on shaky signals');
+    expect((out as any).candidates).toHaveLength(3);
+  });
+});

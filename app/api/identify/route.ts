@@ -133,8 +133,19 @@ export async function POST(req: Request) {
     // cards carry that number, so the number alone could not settle it -- and
     // every print shares the name, so nothing else could either. Together they
     // leave exactly one.
+    //
+    // Only signals the model is actually SURE of may resolve a card outright.
+    // A real scan reported the number as "tentative rather than confirmed" and
+    // the set as "inferred from the artwork rather than a clearly legible set
+    // symbol" -- treating those as facts would auto-accept one of three cards
+    // sharing that number, at $5.81, $8.86 and $26.76. A quietly wrong card AND
+    // a wrong valuation is exactly what the never-guess rule exists to prevent.
+    const SIGNAL_CERTAINTY_FLOOR = 80;
+    const numberIsSolid = read.number_confidence >= SIGNAL_CERTAINTY_FLOOR;
+    const setIsSolid = read.set_confidence >= SIGNAL_CERTAINTY_FLOOR;
+
     let uniquelyResolved = false;
-    if (numberMatches.length > 0 && setMatches.length > 0) {
+    if (numberIsSolid && setIsSolid && numberMatches.length > 0 && setMatches.length > 0) {
       const both = numberMatches.filter((r) => setMatches.includes(r));
       if (both.length === 1) {
         ranked = [both[0], ...ranked.filter((r) => r !== both[0])];
@@ -162,6 +173,9 @@ export async function POST(req: Request) {
         autoAcceptFloor: autoAcceptFloorFor(top.apiCard.marketPrice),
         clearlyBest: isClearlyBest(ranked),
         uniquelyResolved,
+        numberConfidence: read.number_confidence,
+        setConfidence: read.set_confidence,
+        signalCertaintyFloor: SIGNAL_CERTAINTY_FLOOR,
         numberMatchCount: numberMatches.length,
         setMatchCount: setMatches.length,
         queriesTried: queries,

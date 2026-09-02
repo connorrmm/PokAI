@@ -5,7 +5,9 @@ export interface CardRead {
   name: string | null;
   alternate_names: string[];
   number: string | null;
+  number_confidence: number;
   set_name: string | null;
+  set_confidence: number;
   rarity: string | null;
   hp: string | null;
   legibility: 'clear' | 'partial' | 'poor';
