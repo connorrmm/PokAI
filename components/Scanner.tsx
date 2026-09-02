@@ -398,9 +398,16 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
     ...(vision ? [] : ([['Which crop worked', d.ocrStrategy ?? '(none succeeded)']] as Array<[string, string]>)),
     ['Card number read', d.numberText ? `"${d.numberText.replace(/\s+/g, ' ').trim()}"` : '(not read)'],
     ['Cards found in database', String(d.candidatesFound)],
-    ['Best match', d.topName ? `${d.topName} (name score ${d.topScore})` : '(none)'],
-    ['Score needed to auto-accept', d.autoAcceptFloor != null ? String(d.autoAcceptFloor) : '—'],
+    ['Best match', d.topName ?? '(none)'],
+    ['Confidence in this scan', d.topScore != null ? `${d.topScore}%` : '—'],
+    ['Score needed to accept automatically', d.autoAcceptFloor != null ? String(d.autoAcceptFloor) : '—'],
+    ...(d.uniquelyResolved
+      ? ([['Number + set agreed on', 'exactly one card']] as Array<[string, string]>) : []),
     ['Time taken', `${(d.elapsedMs / 1000).toFixed(1)}s`],
+    ...(d.usage ? ([[
+      'This scan cost',
+      `$${d.usage.costUsd.toFixed(4)} (${d.usage.inputTokens.toLocaleString()} in / ${d.usage.outputTokens} out)`,
+    ]] as Array<[string, string]>) : []),
   ];
   return (
     <details style={{ marginTop: 16, fontSize: 12 }}>

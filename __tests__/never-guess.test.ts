@@ -263,3 +263,71 @@ describe('API response stays readable by the live single-file app', () => {
     expect(c.images?.large).toContain('tcgplayer.com');
   });
 });
+
+describe('two independent signals identify one print (real Eevee ex scan)', () => {
+  // Reproduces an actual field scan. The vision model correctly read the name
+  // "Eevee ex", the number "075/131" and the set "Prismatic Evolutions" from a
+  // blurred, shadowed photo -- and the app still offered five options, because
+  // every print shares the name (so nothing is ever "clearly best") and THREE
+  // different cards carry the number 075/131.
+  const eevee = (id: number, number: string, setName: string, price: number): ApiCard =>
+    ({ id, name: 'Eevee ex', number, setName, marketPrice: price });
+
+  const realScan: RankedCandidate[] = [
+    { apiCard: eevee(1, '075/131', 'SV: Prismatic Evolutions', 5.81), score: 95 },
+    { apiCard: eevee(2, '167/131', 'SV: Prismatic Evolutions', 181.32), score: 95 },
+    { apiCard: eevee(3, '075/131', 'Prize Pack Series Cards', 26.76), score: 95 },
+    { apiCard: eevee(4, '075/131', 'Miscellaneous Cards & Products', 8.86), score: 95 },
+    { apiCard: eevee(5, '174', 'SV: Scarlet & Violet Promo Cards', 21.95), score: 95 },
+  ];
+
+  it('the number ALONE does not resolve it -- three cards share 075/131', () => {
+    const n = extractCardNumber('075/131');
+    const matches = realScan.filter((r) => numberMatchesCard(n, r.apiCard.number) === true);
+    expect(matches).toHaveLength(3);
+  });
+
+  it('name score alone can never break the tie -- every print shares the name', () => {
+    expect(isClearlyBest(realScan)).toBe(false);
+  });
+
+  it('WAS the observed bug: five options despite reading number and set', () => {
+    const out = decide({ text: 'Eevee ex', ranked: realScan, confidence: 94, topValue: 5.81 });
+    expect(out.ok).toBe(false);
+    expect((out as any).candidates).toHaveLength(5);
+  });
+
+  it('IS the fix: number + set together identify one card, so it is accepted', () => {
+    const out = decide({
+      text: 'Eevee ex', ranked: realScan, confidence: 94, topValue: 5.81,
+      numberMatch: true, uniquelyResolved: true,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.apiCard.id).toBe(1);
+    expect(out.apiCard.setName).toBe('SV: Prismatic Evolutions');
+  });
+
+  it('resolving uniquely does NOT bypass the confidence bar', () => {
+    // The signals agreeing is not permission to accept a weak read.
+    const out = decide({
+      text: 'Eevee ex', ranked: realScan, confidence: 70, topValue: 5.81,
+      numberMatch: true, uniquelyResolved: true,
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('resolving uniquely does NOT bypass the higher bar on a valuable card', () => {
+    // 94 clears 92 for a cheap card but must NOT clear 97 for a $181 one.
+    const cheap = decide({
+      text: 'Eevee ex', ranked: realScan, confidence: 94, topValue: 5.81,
+      numberMatch: true, uniquelyResolved: true,
+    });
+    const pricey = decide({
+      text: 'Eevee ex', ranked: realScan, confidence: 94, topValue: 181.32,
+      numberMatch: true, uniquelyResolved: true,
+    });
+    expect(cheap.ok).toBe(true);
+    expect(pricey.ok).toBe(false);
+  });
+});

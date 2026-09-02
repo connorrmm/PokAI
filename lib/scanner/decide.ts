@@ -26,17 +26,36 @@ export interface DecideInput {
   topValue?: number | null;
   numberMatch?: boolean | null;
   imageSimilarity?: number | null;
+  /**
+   * Two independent signals read off the card -- the collector number AND the
+   * set -- agreed on exactly ONE candidate.
+   *
+   * This exists because name score alone cannot express it. Every print of a
+   * card shares its name, so they all tie on name and "clearly best" is never
+   * true, even when the printed number and set identify one print beyond
+   * doubt. A real scan of an Eevee ex read '075/131' and 'Prismatic
+   * Evolutions' correctly and was still shown five options, because three
+   * different cards share that number and the tie was never broken.
+   *
+   * Deliberately demanding: it requires BOTH signals present, agreeing, and
+   * narrowing to a single candidate. One signal alone is corroboration, not
+   * proof, and still goes to the user.
+   */
+  uniquelyResolved?: boolean;
 }
 
 export function decide({
   text, ranked, confidence, topValue, numberMatch = null, imageSimilarity = null,
+  uniquelyResolved = false,
 }: DecideInput): IdentifyOutcome {
   if (ranked.length === 0) {
     return { ok: false, reason: 'no_match', text };
   }
 
   const top = ranked[0];
-  const clearlyBest = isClearlyBest(ranked);
+  // Independent corroboration on a single card counts as being clearly best.
+  // The confidence threshold below still has to be cleared on its own.
+  const clearlyBest = uniquelyResolved || isClearlyBest(ranked);
   const floor = autoAcceptFloorFor(topValue);
 
   if (confidence >= floor && clearlyBest) {

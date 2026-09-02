@@ -95,6 +95,11 @@ export async function POST(req: Request) {
     }
 
     let ranked: RankedCandidate[] = rankCandidatesByName(cards, read.name);
+    // Track which candidates each independent signal points at, so their
+    // INTERSECTION can be checked. Either alone is often ambiguous; together
+    // they frequently identify one print exactly.
+    let numberMatches: RankedCandidate[] = [];
+    let setMatches: RankedCandidate[] = [];
 
     // The collector number is the strongest disambiguator when one name spans
     // dozens of prints. Applied across ALL tied candidates, not just the first.
@@ -102,6 +107,7 @@ export async function POST(req: Request) {
     let numberMatch: boolean | null = null;
     if (extracted) {
       const exact = ranked.filter((r) => numberMatchesCard(extracted, r.apiCard.number) === true);
+      numberMatches = exact;
       if (exact.length === 1) {
         ranked = [exact[0], ...ranked.filter((r) => r !== exact[0])];
         numberMatch = true;
@@ -116,8 +122,24 @@ export async function POST(req: Request) {
     if (read.set_name) {
       const want = read.set_name.toLowerCase();
       const inSet = ranked.filter((r) => (r.apiCard.setName || '').toLowerCase().includes(want));
+      setMatches = inSet;
       if (inSet.length > 0 && inSet.length < ranked.length) {
         ranked = [...inSet, ...ranked.filter((r) => !inSet.includes(r))];
+      }
+    }
+
+    // Do the two signals agree on exactly one card? A real scan read
+    // '075/131' and 'Prismatic Evolutions' correctly, but three different
+    // cards carry that number, so the number alone could not settle it -- and
+    // every print shares the name, so nothing else could either. Together they
+    // leave exactly one.
+    let uniquelyResolved = false;
+    if (numberMatches.length > 0 && setMatches.length > 0) {
+      const both = numberMatches.filter((r) => setMatches.includes(r));
+      if (both.length === 1) {
+        ranked = [both[0], ...ranked.filter((r) => r !== both[0])];
+        uniquelyResolved = true;
+        numberMatch = true;
       }
     }
 
@@ -130,7 +152,7 @@ export async function POST(req: Request) {
 
     const outcome = decide({
       text: read.name, ranked, confidence,
-      topValue: top.apiCard.marketPrice, numberMatch,
+      topValue: ranked[0].apiCard.marketPrice, numberMatch, uniquelyResolved,
     });
 
     return NextResponse.json({
@@ -139,6 +161,9 @@ export async function POST(req: Request) {
         model: vision.model,
         autoAcceptFloor: autoAcceptFloorFor(top.apiCard.marketPrice),
         clearlyBest: isClearlyBest(ranked),
+        uniquelyResolved,
+        numberMatchCount: numberMatches.length,
+        setMatchCount: setMatches.length,
         queriesTried: queries,
         candidatesFound: cards.length,
       },

@@ -58,6 +58,10 @@ export interface ScanDiagnostics {
   autoAcceptFloor: number | null;
   /** Milliseconds spent, end to end. */
   elapsedMs: number;
+  /** What this scan cost, from real token counts rather than an estimate. */
+  usage?: { inputTokens: number; outputTokens: number; model: string; costUsd: number } | null;
+  /** Did the number and set together identify exactly one print? */
+  uniquelyResolved?: boolean;
 }
 
 export type IdentifyOutcome =

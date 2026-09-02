@@ -37,6 +37,21 @@ export function downscale(dataUrl: string, max = 1400, quality = 0.85): Promise<
   });
 }
 
+/**
+ * Published per-million-token rates, so a scan's cost is a real number rather
+ * than my estimate. Update if pricing changes.
+ */
+const RATES: Record<string, { in: number; out: number }> = {
+  'claude-opus-5': { in: 5, out: 25 },
+  'claude-sonnet-5': { in: 2, out: 10 },
+  'claude-haiku-4-5': { in: 1, out: 5 },
+};
+
+function estimateCost(model: string | undefined, inTok: number, outTok: number): number {
+  const r = RATES[model ?? ''] ?? RATES['claude-opus-5'];
+  return (inTok / 1_000_000) * r.in + (outTok / 1_000_000) * r.out;
+}
+
 export async function identifyWithVision(cardPhoto: string): Promise<VisionScan> {
   const startedAt = Date.now();
   const small = await downscale(cardPhoto);
@@ -57,15 +72,23 @@ export async function identifyWithVision(cardPhoto: string): Promise<VisionScan>
   const outcome = json?.outcome;
   const d = json?.diagnostics ?? {};
 
+  const u = json?.usage;
   const diagnostics: ScanDiagnostics = {
     ocrText: vision?.name ?? '',
     ocrStrategy: `vision:${d.model ?? 'unknown'}`,
     numberText: vision?.number ?? null,
     candidatesFound: d.candidatesFound ?? 0,
-    topScore: 'confidence' in (outcome ?? {}) ? outcome.confidence : null,
+    // The scan's overall confidence, not a name-similarity score. It was
+    // previously labelled "name score" in the UI, which was simply wrong.
+    topScore: typeof outcome?.confidence === 'number' ? outcome.confidence : null,
     topName: outcome?.ok ? outcome.apiCard?.name
       : (outcome?.candidates?.[0] as ApiCard | undefined)?.name ?? null,
     autoAcceptFloor: d.autoAcceptFloor ?? null,
+    uniquelyResolved: Boolean(d.uniquelyResolved),
+    usage: u ? {
+      inputTokens: u.inputTokens, outputTokens: u.outputTokens,
+      model: d.model ?? 'unknown', costUsd: estimateCost(d.model, u.inputTokens, u.outputTokens),
+    } : null,
     elapsedMs: Date.now() - startedAt,
   };
 
