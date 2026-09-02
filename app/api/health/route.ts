@@ -21,8 +21,8 @@ export async function GET() {
     {
       name: 'ANTHROPIC_API_KEY',
       set: Boolean(process.env.ANTHROPIC_API_KEY),
-      required: false,
-      used_for: 'Vision-model card recognition. Not built yet - nothing reads this.',
+      required: true,
+      used_for: 'Vision-model card recognition - the primary scanner. Without it, scanning falls back to on-device OCR, which reads real-world photos poorly.',
     },
     {
       name: 'NEXT_PUBLIC_SUPABASE_URL',

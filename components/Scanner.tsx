@@ -1,6 +1,8 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { identifyCard } from '@/lib/scanner/identify';
+import { identifyWithVision } from '@/lib/scanner/identify-vision';
+import type { CardRead } from '@/lib/scanner/vision-types';
 import { warmUpOcr } from '@/lib/scanner/ocr-client';
 import type { ApiCard, IdentifyResult, ScanDiagnostics } from '@/lib/scanner/types';
 
@@ -32,6 +34,7 @@ export default function Scanner() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<IdentifyResult | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [vision, setVision] = useState<CardRead | null>(null);
 
   // Warm the OCR engine at load: it downloads several MB, and without this the
   // first scan looks like a hang rather than a download.
@@ -141,18 +144,42 @@ export default function Scanner() {
     await run(cardPhoto, full);
   }
 
-  /** Shared path for a camera capture and an uploaded photo. */
+  /**
+   * Shared path for a camera capture and an uploaded photo.
+   *
+   * Vision first, OCR as fallback. Real user photos are blurry, glared and
+   * tilted; a vision model reads them the way a person does, where letter-shape
+   * OCR simply has nothing to match. OCR is kept as a safety net for when the
+   * vision service is unreachable -- degraded recognition beats none.
+   */
   async function run(cardPhoto: string, fullFrame?: string | null) {
     setPhoto(cardPhoto);
+    setVision(null);
     setPhase('working');
     setStatus('Reading card…');
+
     try {
-      const result = await identifyCard({ cardPhoto, fullFrame: fullFrame ?? cardPhoto });
+      const { result, vision: v } = await identifyWithVision(cardPhoto);
+      setVision(v);
       setOutcome(result);
       setPhase('result');
+      return;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setPhase('result');
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('Vision identification unavailable, falling back to OCR:', msg);
+      setStatus('Vision unavailable — trying on-device reading…');
+      try {
+        const result = await identifyCard({ cardPhoto, fullFrame: fullFrame ?? cardPhoto });
+        setOutcome(result);
+        setPhase('result');
+        // Surface why the better path was skipped, rather than silently
+        // serving worse results and letting it look like poor accuracy.
+        setError(`Used fallback on-device reading because the vision service failed: ${msg}`);
+        return;
+      } catch (e2) {
+        setError(e2 instanceof Error ? e2.message : String(e2));
+        setPhase('result');
+      }
     }
   }
 
@@ -175,7 +202,7 @@ export default function Scanner() {
   }
 
   function reset() {
-    setOutcome(null); setPhoto(null); setError(null); setPhase('idle');
+    setOutcome(null); setPhoto(null); setError(null); setVision(null); setPhase('idle');
   }
 
   return (
@@ -239,14 +266,14 @@ export default function Scanner() {
       )}
 
       {phase === 'result' && outcome && (
-        <ResultView outcome={outcome} photo={photo} onRetake={reset} />
+        <ResultView outcome={outcome} photo={photo} vision={vision} onRetake={reset} />
       )}
     </div>
   );
 }
 
-function ResultView({ outcome, photo, onRetake }: {
-  outcome: IdentifyResult; photo: string | null; onRetake: () => void;
+function ResultView({ outcome, photo, vision, onRetake }: {
+  outcome: IdentifyResult; photo: string | null; vision: CardRead | null; onRetake: () => void;
 }) {
   if (outcome.ok) {
     const c = outcome.apiCard;
@@ -257,7 +284,7 @@ function ResultView({ outcome, photo, onRetake }: {
         </div>
         <CardRow card={c} />
         <button onClick={onRetake} style={{ ...btn, marginTop: 16 }}>Scan another</button>
-        <Diagnostics d={outcome.diagnostics} />
+        <Diagnostics d={outcome.diagnostics} vision={vision} />
       </div>
     );
   }
@@ -317,7 +344,7 @@ function ResultView({ outcome, photo, onRetake }: {
       )}
 
       <button onClick={onRetake} style={{ ...btn, marginTop: 16 }}>Retake photo</button>
-      <Diagnostics d={outcome.diagnostics} />
+      <Diagnostics d={outcome.diagnostics} vision={vision} />
     </div>
   );
 }
@@ -331,11 +358,21 @@ function ResultView({ outcome, photo, onRetake }: {
  * are three different bugs with three different fixes, and they look identical
  * from the outside.
  */
-function Diagnostics({ d }: { d?: ScanDiagnostics }) {
+function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | null }) {
   if (!d) return null;
   const rows: Array<[string, string]> = [
-    ['Text read from the card', d.ocrText ? `"${d.ocrText}"` : '(nothing readable)'],
-    ['Which crop worked', d.ocrStrategy ?? '(none succeeded)'],
+    ...(vision ? ([
+      ['Read by', d.ocrStrategy?.startsWith('vision') ? 'AI vision model' : 'On-device OCR'],
+      ['How legible the card was', vision.legibility],
+      ['Model certainty of the name', `${vision.confidence}%`],
+      ['Set read', vision.set_name ?? '(not readable)'],
+      ['Rarity read', vision.rarity ?? '(not readable)'],
+      ...(vision.alternate_names.length
+        ? ([['Other possible names', vision.alternate_names.join(', ')]] as Array<[string, string]>) : []),
+      ...(vision.notes ? ([['Model notes', vision.notes]] as Array<[string, string]>) : []),
+    ] as Array<[string, string]>) : []),
+    ['Name read from the card', d.ocrText ? `"${d.ocrText}"` : '(nothing readable)'],
+    ...(vision ? [] : ([['Which crop worked', d.ocrStrategy ?? '(none succeeded)']] as Array<[string, string]>)),
     ['Card number read', d.numberText ? `"${d.numberText.replace(/\s+/g, ' ').trim()}"` : '(not read)'],
     ['Cards found in database', String(d.candidatesFound)],
     ['Best match', d.topName ? `${d.topName} (name score ${d.topScore})` : '(none)'],

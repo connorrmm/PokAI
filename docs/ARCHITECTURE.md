@@ -99,11 +99,32 @@ The model replaces the *reading* step only. Everything downstream — matching,
 confidence, thresholds, the never-guess rule — stays. That existing logic is
 sound; it was being fed bad text.
 
-Why Haiku 4.5: it is the cheapest current model that can read images, and card
-reading is a well-defined extraction task, not a reasoning problem. If accuracy
-testing shows it missing cards a larger model catches, moving up to Claude
-Sonnet 5 is a one-line change at roughly twice the cost. **That decision should
-be made from measured accuracy, not guessed at now.**
+**Model choice is a setting, not a rewrite.** `POKAI_VISION_MODEL` selects it;
+the default is `claude-opus-5`.
+
+The earlier plan here named Haiku 4.5 on cost grounds. That was decided before
+the first field test, which changed the picture: three real scans in ordinary
+conditions failed outright, and Sterling's point stands — most photos this
+product ever sees will have something blurred, glared or tilted. Recognition
+accuracy is the product, so the default is the strongest option and stepping
+down is a deliberate, measured choice rather than an assumption baked in from
+the start.
+
+| Model | Input / output per 1M | Rough cost per 1,000 scans |
+|---|---|---|
+| `claude-opus-5` (default) | $5 / $25 | ~$12 |
+| `claude-sonnet-5` | $2 / $10 | ~$5 |
+| `claude-haiku-4-5` | $1 / $5 | ~$2.50 |
+
+Estimates, not measurements — they assume a ~1400px image and a short
+structured reply, and should be confirmed against real usage. Images are
+downscaled client-side before upload, which is where most of the cost is
+controlled: a raw phone photo carries several times the image tokens of a
+1400px one with no benefit, since a card's name and number are perfectly
+legible at that size.
+
+Once the labelled accuracy set exists (`docs/SCANNER.md`), compare the tiers on
+the same photos and pick on evidence. Until then, accuracy over cost.
 
 Tesseract stays initially as an offline fallback, and gets removed once the
 vision path is proven. Two recognition paths is complexity we only want while
