@@ -1,4 +1,5 @@
 import Scanner from '@/components/Scanner';
+import SetupStatus from '@/components/SetupStatus';
 
 /**
  * The scanner, at '/'.
@@ -15,7 +16,10 @@ export default function Home() {
       <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: 13 }}>
         Scan → Know → Track → Grow
       </p>
-      <div style={{ marginTop: 24 }}><Scanner /></div>
+      <div style={{ marginTop: 24 }}>
+        <SetupStatus />
+        <Scanner />
+      </div>
       <p style={{ marginTop: 40, fontSize: 12, color: 'var(--muted)' }}>
         Portfolio and tournaments are not ported yet — they are in the{' '}
         <a href="/classic">classic app</a>, which uses the older on-device
