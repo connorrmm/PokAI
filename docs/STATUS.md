@@ -467,6 +467,68 @@ costed in `docs/ROADMAP.md` Phase 4.
 **Still to port:** portfolio, collection, scan history, tournaments, and the
 reveal animation. The scan path itself is done.
 
+## 10. Where to resume — as of 2026-09-01, end of day
+
+**One blocker, and it is not code: the Anthropic API account has no credit.**
+
+Everything else is built, deployed and verified. The vision scanner has never
+completed a single successful scan, purely because the API refuses the request
+with `Your credit balance is too low`.
+
+### The billing trap that cost the evening
+
+Sterling bought **$40 of "usage credits" on his Claude Max subscription**. Those
+are for the Claude *app* when it hits a plan limit. **The API cannot spend
+them.** API usage needs separate prepaid credit bought at
+**console.anthropic.com**, which is a different product with a different
+balance on a different site.
+
+The tell: the subscription screen says *"keep using Claude if you hit a plan
+limit"* and shows a reset date. API credit is a plain dollar balance with no
+plan or reset.
+
+**To resume:** buy API credit at console.anthropic.com (\$5 is ~400 scans),
+confirm `pok-ai-drab.vercel.app` shows no amber setup banner, then scan. No code
+changes are required.
+
+Sterling is also asking Anthropic support whether the \$40 can be transferred
+or refunded. That is unresolved and does not block anything.
+
+### What is confirmed working
+
+| | |
+|---|---|
+| Supabase schema, RLS tested three times | ✅ |
+| tcgapi.dev connected, key live, returns real data | ✅ |
+| Scanner ported, 26 tests passing | ✅ |
+| Vision endpoint built, wired, key valid and authenticating | ✅ |
+| Deployed at `pok-ai-drab.vercel.app` | ✅ |
+
+The vision key IS valid — the API authenticated it and rejected only on
+balance. That is the last thing proven before stopping.
+
+### Bugs found by field testing on a real phone, all in one evening
+
+None were findable from the development environment, and every one passed the
+full test suite:
+
+1. **Build preset** — the project was configured as a static site, so merging
+   the rebuild would have served no site at all. Fixed by pinning
+   `framework: nextjs` in `vercel.json`.
+2. **Dropped guided crop** — the port sent the whole camera frame, so OCR read
+   the wall behind the card rather than the card.
+3. **Broken API contract** — the new `/api/search` shape silently degraded the
+   live app to "Unknown Set" with no card art.
+4. **Wrong page** — three test rounds ran against the original OCR app because
+   it was still served at `/`. Fixed by making the rebuild the default.
+5. **Masked API key** — a key copied out of Vercel's own display is dots, not a
+   key, and produced an unreadable ByteString error.
+
+**The lesson worth keeping:** 26 unit tests passed throughout every one of
+these. They test the pieces; all five failures were in the seams between
+pieces, or in the environment. Field testing on a real device found what the
+test suite structurally could not.
+
 ## Rules for whoever edits this file next
 
 1. Date it and name the commit you verified against.
