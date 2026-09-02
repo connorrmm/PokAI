@@ -114,7 +114,9 @@ export async function readCardFromImage(
   const client = new Anthropic({ apiKey: key });
   const startedAt = Date.now();
 
-  const response = await client.messages.parse({
+  let response;
+  try {
+    response = await client.messages.parse({
     model: MODEL,
     max_tokens: 2000,
     system: SYSTEM,
@@ -125,8 +127,30 @@ export async function readCardFromImage(
         { type: 'text', text: 'Identify this Pokémon card. Report honestly what you can and cannot read.' },
       ],
     }],
-    output_config: { format: zodOutputFormat(CardReadSchema) },
-  });
+      output_config: { format: zodOutputFormat(CardReadSchema) },
+    });
+  } catch (e) {
+    // Translate the failures a non-technical operator will actually hit.
+    // Raw provider JSON in the UI tells the person who has to fix it nothing.
+    const raw = e instanceof Error ? e.message : String(e);
+    if (raw.includes('credit balance is too low')) {
+      throw new Error(
+        'The AI account has no credit left, so the card could not be read. '
+        + 'Add credit at console.anthropic.com under Plans & Billing. '
+        + 'The API key itself is working correctly.',
+      );
+    }
+    if (raw.includes('authentication_error') || raw.includes('invalid x-api-key')) {
+      throw new Error(
+        'The AI account rejected the API key. Check that ANTHROPIC_API_KEY holds a '
+        + 'current, active key from console.anthropic.com.',
+      );
+    }
+    if (raw.includes('rate_limit')) {
+      throw new Error('The AI service is rate limiting us right now. Wait a moment and scan again.');
+    }
+    throw new Error(raw);
+  }
 
   const read = response.parsed_output;
   if (!read) throw new Error('Vision model returned no parsable result');
