@@ -22,8 +22,21 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
  * candidate search; they never become an answer on their own.
  */
 
-/** Model is configurable so the accuracy/cost tradeoff is a setting, not a rewrite. */
-const MODEL = process.env.POKAI_VISION_MODEL || 'claude-opus-5';
+/**
+ * Model is configurable so the accuracy/cost tradeoff is a setting, not a
+ * rewrite. Override with POKAI_VISION_MODEL.
+ *
+ * Default chosen by measurement, not reasoning. The same photo of an Eevee ex
+ * run through four options on /compare (2026-09-02): all four read the name,
+ * number and set correctly, and Haiku reported HIGHER certainty on the number
+ * (88 vs 82) and set (88 vs 80) than Opus, slightly faster, at a fifth of the
+ * cost -- $6.56 per 1,000 scans against $34.62.
+ *
+ * I had recommended starting on Opus for accuracy. The measurement did not
+ * support it. One card is thin evidence, so re-run /compare as the accuracy
+ * set grows; switching back is one environment variable.
+ */
+const MODEL = process.env.POKAI_VISION_MODEL || 'claude-haiku-4-5';
 
 export const CardReadSchema = z.object({
   is_pokemon_card: z.boolean()

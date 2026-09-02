@@ -100,7 +100,41 @@ confidence, thresholds, the never-guess rule — stays. That existing logic is
 sound; it was being fed bad text.
 
 **Model choice is a setting, not a rewrite.** `POKAI_VISION_MODEL` selects it;
-the default is `claude-opus-5`.
+the default is **`claude-haiku-4-5`**, chosen by measurement.
+
+### Measured, 2026-09-02 — one photo, four configurations
+
+The same photo of an Eevee ex through `/compare`:
+
+| Model | Result | Per 1,000 scans | Time | Certainty: name / number / set |
+|---|---|---|---|---|
+| Opus 5 | all correct | $34.62 | 12.5s | 96 / 82 / 80 |
+| Opus 5, low effort | all correct | $34.31 | 11.5s | 96 / 85 / 88 |
+| Sonnet 5 | all correct | $12.98 | 11.2s | 97 / 88 / 92 |
+| **Haiku 4.5** | **all correct** | **$6.56** | **10.9s** | 96 / 88 / 88 |
+
+**Haiku won on every axis that matters here.** Equally correct, higher certainty
+about the number and set than Opus, marginally faster, at a fifth of the cost.
+
+Three things this settled that reasoning had got wrong:
+
+1. **I recommended Opus for accuracy.** On this card it bought nothing, and was
+   *less* certain about the two fields that decide which print you own.
+2. **My cost estimate was ~$12 per 1,000.** Opus actually costs $34.62 — nearly
+   3x out. Estimating token counts is not a substitute for measuring them.
+3. **Lowering effort saved almost nothing** ($34.62 → $34.31), because **input
+   tokens dominate**: 3,958 in against ~580 out. The image is the cost, not the
+   thinking.
+
+That last point is the important one for what comes next. **The biggest
+remaining lever is image size, not model choice.** The uploaded photo was mostly
+desk; the card occupied a fraction of the frame. Cropping to the card before
+upload should cut input tokens substantially and likely improve accuracy too,
+since the model spends less of the image on woodgrain.
+
+Caveat worth keeping: **this is one card.** Re-run `/compare` as the accuracy set
+grows, especially on vintage cards, heavy holo glare and damaged edges, where a
+larger model may separate itself. Switching back is one environment variable.
 
 The earlier plan here named Haiku 4.5 on cost grounds. That was decided before
 the first field test, which changed the picture: three real scans in ordinary
@@ -110,14 +144,8 @@ accuracy is the product, so the default is the strongest option and stepping
 down is a deliberate, measured choice rather than an assumption baked in from
 the start.
 
-| Model | Input / output per 1M | Rough cost per 1,000 scans |
-|---|---|---|
-| `claude-opus-5` (default) | $5 / $25 | ~$12 |
-| `claude-sonnet-5` | $2 / $10 | ~$5 |
-| `claude-haiku-4-5` | $1 / $5 | ~$2.50 |
 
-Estimates, not measurements — they assume a ~1400px image and a short
-structured reply, and should be confirmed against real usage. Images are
+Superseded by the measured table above. Images are
 downscaled client-side before upload, which is where most of the cost is
 controlled: a raw phone photo carries several times the image tokens of a
 1400px one with no benefit, since a card's name and number are perfectly

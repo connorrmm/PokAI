@@ -48,7 +48,7 @@ const RATES: Record<string, { in: number; out: number }> = {
 };
 
 function estimateCost(model: string | undefined, inTok: number, outTok: number): number {
-  const r = RATES[model ?? ''] ?? RATES['claude-opus-5'];
+  const r = RATES[model ?? ''] ?? RATES['claude-haiku-4-5'];
   return (inTok / 1_000_000) * r.in + (outTok / 1_000_000) * r.out;
 }
 
