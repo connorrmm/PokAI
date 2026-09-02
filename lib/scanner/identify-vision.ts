@@ -52,14 +52,67 @@ function estimateCost(model: string | undefined, inTok: number, outTok: number):
   return (inTok / 1_000_000) * r.in + (outTok / 1_000_000) * r.out;
 }
 
+/**
+ * A high-resolution crop of the bottom of the card, where the collector number
+ * and set symbol are printed.
+ *
+ * This exists because of a measured failure. Across six real scans the number
+ * was read ZERO times, every one reporting 0% certainty, with the model saying
+ * each time that the digits were too small or too glared to read. Without a
+ * number no print can be uniquely identified, so every scan fell back to a
+ * candidate list -- one of them fifty cards long.
+ *
+ * The cause is partly mine: photos are downscaled to 1400px to control cost,
+ * and a collector number is about 2% of a card's height. After downscaling it
+ * is a few pixels tall and genuinely unreadable, however good the model.
+ *
+ * Sending the bottom third separately, capped at 1568px wide rather than the
+ * whole card's 1400px longest edge, gives the digits about 2.5x the pixels.
+ * Measured cost: roughly 1,500 extra input tokens, about $0.0015 a scan on
+ * Haiku, taking a scan from ~$0.0035 to ~$0.005. Worth it if it turns a
+ * fifty-card list into one card.
+ */
+export function cropBottomStrip(dataUrl: string, fraction = 0.32, maxWidth = 1568): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const sy = Math.round(img.height * (1 - fraction));
+      const sh = img.height - sy;
+      if (sh < 20) { resolve(null); return; }
+      // The width cap is the whole ballgame. Digit sharpness is decided by
+      // output width divided by original width -- nothing else. 1568px is the
+      // largest edge the API keeps; anything bigger is downscaled on arrival
+      // and simply wasted. The 2x ceiling stops us paying tokens for pure
+      // interpolation when the source photo is already small.
+      const scale = Math.min(maxWidth / img.width, 2);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(sh * scale);
+      const ctx = c.getContext('2d');
+      if (!ctx) { resolve(null); return; }
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, sy, img.width, sh, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.92));
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
 export async function identifyWithVision(cardPhoto: string): Promise<VisionScan> {
   const startedAt = Date.now();
-  const small = await downscale(cardPhoto);
+  const [small, strip] = await Promise.all([
+    downscale(cardPhoto),
+    // Crop from the ORIGINAL, not the downscaled copy -- the whole point is to
+    // keep resolution the downscale would have thrown away.
+    cropBottomStrip(cardPhoto),
+  ]);
 
   const res = await fetch('/api/identify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: small, mediaType: 'image/jpeg' }),
+    body: JSON.stringify({ image: small, bottomStrip: strip, mediaType: 'image/jpeg' }),
   });
 
   const json = await res.json().catch(() => null);

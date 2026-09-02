@@ -515,13 +515,11 @@ The second is the more important lesson: the model was already telling us how
 sure it was, in prose, and the code ignored it. Asking for that certainty as
 structured data turned an overconfident guess into a correct answer.
 
-## 11. Where to resume — as of 2026-09-01, end of day
+## 11. The billing trap — resolved 2026-09-02
 
-**One blocker, and it is not code: the Anthropic API account has no credit.**
-
-Everything else is built, deployed and verified. The vision scanner has never
-completed a single successful scan, purely because the API refuses the request
-with `Your credit balance is too low`.
+**Kept because it will happen again to somebody.** For one evening the vision
+scanner could not complete a single scan, purely because the API refused every
+request with `Your credit balance is too low`. It was never a code problem.
 
 ### The billing trap that cost the evening
 
@@ -535,14 +533,13 @@ The tell: the subscription screen says *"keep using Claude if you hit a plan
 limit"* and shows a reset date. API credit is a plain dollar balance with no
 plan or reset.
 
-**To resume:** buy API credit at console.anthropic.com (\$5 is ~400 scans),
-confirm `pok-ai-drab.vercel.app` shows no amber setup banner, then scan. No code
-changes are required.
+**The fix was:** buy API credit at console.anthropic.com (\$5 is ~400 scans).
+Done on 2026-09-02; scanning has worked since. No code change was needed.
 
 Sterling is also asking Anthropic support whether the \$40 can be transferred
 or refunded. That is unresolved and does not block anything.
 
-### What is confirmed working
+### What was confirmed working at that point
 
 | | |
 |---|---|
@@ -576,6 +573,64 @@ full test suite:
 these. They test the pieces; all five failures were in the seams between
 pieces, or in the environment. Field testing on a real device found what the
 test suite structurally could not.
+
+## 12. Where to resume — 2026-09-02, end of day
+
+Verified against commit on branch `claude/audit-repo-state-a8hhjy`.
+
+### What changed today
+
+- **API credit bought — the scanner works end to end.** First correct
+  identification: Eevee ex 075/131 at 99%.
+- **Model settled by measurement, not opinion.** All four candidates were run
+  on the same photo (`/compare`). All four got it right. Haiku 4.5 is now the
+  default: **5x cheaper than Opus with no accuracy loss on this task.**
+- **First labelled accuracy set built** — six of Sterling's real cards, ground
+  truth recorded in `docs/ACCURACY-SET.md`.
+
+### What run 01 found, and what it does not yet prove
+
+Six cards. **Zero confidently wrong answers** — the never-guess rule held on
+every one. But **zero auto-accepts** either: every scan asked the user, one
+with a fifty-card list.
+
+**One cause, on all six: the collector number was never read.** Every scan
+reported 0% number certainty. Without a number no print resolves uniquely, so
+everything falls back to a list. Partly self-inflicted — downscaling to 1400px
+for cost left the digits a few pixels tall.
+
+**The fix is written but NOT verified against real cards.** The scanner now
+sends a magnified crop of the card's bottom edge, taken from the original photo
+before downscaling. It compiles, typechecks, and 36 tests pass. That proves
+nothing about whether a phone camera can now read a collector number.
+
+**Next action: redeploy and rescan the same six cards.** Compare number
+certainty and candidate counts against the run-01 table. If certainty is still
+0%, revert the strip rather than pay ~$1.50 per 1,000 scans for nothing.
+
+### Two questions only Sterling can answer
+
+1. **Was the correct Kangaskhan ex (`040/A063`) in its 22-card list?** If it was
+   not, that is a catalog gap, which is a different and more serious problem
+   than a tuning issue.
+2. **Does PokAI support Japanese cards?** The JP Mega Greninja was misread as
+   *"Kyogre-ex"* and returned zero results. Zero results is safe, but if
+   Japanese cards are in scope this needs a data source that carries them.
+
+### Known costs at today's measurements
+
+| | |
+|---|---|
+| Per scan, before the bottom strip | $0.0035 (**$3.50 / 1,000**) |
+| Per scan, projected with the bottom strip | ~$0.005 (**$5 / 1,000**) |
+| Time per scan | 4.6s |
+| Vercel Pro, needed before commercial launch | $20/mo |
+| tcgapi.dev Pro | $49.99/mo |
+
+### Still not built
+
+Portfolio, collection, scan history, tournaments, reveal animation. Rate
+limiting is per-instance and needs shared storage before real traffic.
 
 ## Rules for whoever edits this file next
 

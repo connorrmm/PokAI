@@ -107,8 +107,14 @@ export interface VisionResult {
 export async function readCardFromImage(
   base64: string,
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
-  /** Overrides for a side-by-side comparison. Production passes neither. */
-  opts?: { model?: string; effort?: 'low' | 'medium' | 'high' },
+  /** Overrides for a side-by-side comparison. Production passes none. */
+  opts?: {
+    model?: string;
+    effort?: 'low' | 'medium' | 'high';
+    /** High-resolution crop of the card's bottom edge, where the collector
+     *  number and set symbol are printed. See cropBottomStrip(). */
+    bottomStrip?: string | null;
+  },
 ): Promise<VisionResult> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
@@ -154,6 +160,10 @@ export async function readCardFromImage(
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+        ...(opts?.bottomStrip ? [
+          { type: 'text' as const, text: 'Second image: a magnified crop of the BOTTOM EDGE of the same card, where the collector number (e.g. "075/131") and the set symbol or code are printed. Read the number from this image, not the first one -- it has far more detail there.' },
+          { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: opts.bottomStrip.replace(/^data:image\/[a-z+]+;base64,/, '') } },
+        ] : []),
         { type: 'text', text: 'Identify this Pokémon card. Report honestly what you can and cannot read.' },
       ],
     }],

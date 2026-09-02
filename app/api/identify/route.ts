@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { image?: string; mediaType?: string };
+  let body: { image?: string; bottomStrip?: string | null; mediaType?: string };
   try {
     body = await req.json();
   } catch {
@@ -59,7 +59,9 @@ export async function POST(req: Request) {
     ? body.mediaType : 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
 
   try {
-    const vision = await readCardFromImage(image, mediaType);
+    const vision = await readCardFromImage(image, mediaType, {
+      bottomStrip: body.bottomStrip ?? null,
+    });
     const read = vision.read;
 
     if (!read.is_pokemon_card) {
