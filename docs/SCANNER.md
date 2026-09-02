@@ -55,6 +55,34 @@ fractions, inverted polarity) stop applying once Tesseract is removed.
 
 Tesseract stays as an offline fallback until the vision path is proven, then goes.
 
+## Diagnosing a failed scan (added 2026-08-31)
+
+The result screen has a **"What the scanner saw"** panel showing the text OCR
+read, which crop attempt produced it, the collector number, how many cards the
+database returned, the best match and its score, the bar it had to clear, and
+the elapsed time.
+
+This exists because every failure on this project so far has been diagnosed by
+guesswork. A failed scan reported only that it failed, and these three cases are
+completely different bugs that look identical from outside:
+
+| What the panel shows | What is actually wrong |
+|---|---|
+| Text read: *(nothing readable)* | OCR never saw the card — framing, focus, or the engine failed to load |
+| Text read: `"FIREBREATHER"` | OCR is reading, badly — a preprocessing or crop-region problem |
+| Text read: `"Charizard"`, 40 cards found, best score 95 | Recognition worked; the card was ambiguous across prints. Tuning, not a bug |
+
+The first was the real cause of the first failed field test: the guided crop had
+been dropped in the port, so OCR was reading the wall behind the card. Nothing
+in the failure message hinted at that.
+
+**A photo can also be uploaded instead of using the camera.** That is not a
+convenience — it makes a scan *repeatable*. The same image can be run against
+the same build twice and against the next build after a change. With the camera
+alone, every test is a different photo, so a genuine improvement and a lucky
+shot are indistinguishable. This is the beginning of the labelled accuracy set
+described at the bottom of this file.
+
 ## Approach used in the prototype
 
 Browser-based OCR (Tesseract.js) reading the card's name region, then a text

@@ -33,6 +33,33 @@ export interface RankedCandidate {
   score: number;
 }
 
+/**
+ * What the scanner actually saw, surfaced to the user.
+ *
+ * Every failure so far has been diagnosed by guesswork because a failed scan
+ * said only that it failed. Knowing whether OCR read nothing, read the wrong
+ * words, or read correctly and then lost on ranking points at three completely
+ * different fixes -- and the difference is invisible from the outside.
+ */
+export interface ScanDiagnostics {
+  /** Exact text OCR returned, before any cleanup. */
+  ocrText: string;
+  /** Which crop attempt produced it (e.g. 'crop-24', 'full-frame'). */
+  ocrStrategy: string | null;
+  /** Collector number read from the bottom strip, if any. */
+  numberText: string | null;
+  /** How many cards the database returned for that text. */
+  candidatesFound: number;
+  /** Name-match score of the best candidate, 0-100. */
+  topScore: number | null;
+  /** Name of the best candidate, whether or not it was accepted. */
+  topName: string | null;
+  /** The bar this scan had to clear, which rises for valuable cards. */
+  autoAcceptFloor: number | null;
+  /** Milliseconds spent, end to end. */
+  elapsedMs: number;
+}
+
 export type IdentifyOutcome =
   | { ok: true; source: 'live-db'; text: string; apiCard: ApiCard; matchScore: number;
       confidence: number; numberMatch: boolean | null; imageSimilarity: number | null }
@@ -40,3 +67,6 @@ export type IdentifyOutcome =
       topGuess: ApiCard | null; candidates: ApiCard[] }
   | { ok: false; reason: 'no_text' | 'no_match' | 'ocr_unavailable' | 'ocr_error';
       text: string; errorDetail?: string; candidates?: ApiCard[] };
+
+/** Any outcome, plus what the scanner saw getting there. */
+export type IdentifyResult = IdentifyOutcome & { diagnostics?: ScanDiagnostics };

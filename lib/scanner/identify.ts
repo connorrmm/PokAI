@@ -16,7 +16,7 @@
  *      hash. Bonus only, never a penalty.
  *   5. Decide. Accept, or show every matching print.
  */
-import type { ApiCard, IdentifyOutcome } from './types';
+import type { ApiCard, IdentifyResult, ScanDiagnostics } from './types';
 import { computeConfidence, autoAcceptFloorFor, isClearlyBest } from './confidence';
 import { rankCandidatesByName, resolveTieByNumber } from './rank';
 import { extractCardNumber } from './number';
@@ -48,29 +48,47 @@ async function defaultSearch(q: string): Promise<ApiCard[]> {
 
 export async function identifyCard({
   cardPhoto, fullFrame, qualityScore, search = defaultSearch,
-}: IdentifyInput): Promise<IdentifyOutcome> {
+}: IdentifyInput): Promise<IdentifyResult> {
+  const startedAt = Date.now();
+  const diag: ScanDiagnostics = {
+    ocrText: '', ocrStrategy: null, numberText: null,
+    candidatesFound: 0, topScore: null, topName: null,
+    autoAcceptFloor: null, elapsedMs: 0,
+  };
+  const done = <T extends object>(o: T): T & { diagnostics: ScanDiagnostics } => {
+    diag.elapsedMs = Date.now() - startedAt;
+    return { ...o, diagnostics: diag };
+  };
+
   const read = await readCardName(cardPhoto, fullFrame);
   if (!read) {
     // Say WHY, not just that it failed.
-    return {
-      ok: false, reason: 'ocr_unavailable', text: '',
+    return done({
+      ok: false as const, reason: 'ocr_unavailable' as const, text: '',
       errorDetail: ocrFailureReason() ?? undefined,
-    };
+    });
   }
-  if (!read.text) return { ok: false, reason: 'no_text', text: '' };
+  diag.ocrText = read.text;
+  diag.ocrStrategy = read.strategy;
+  if (!read.text) return done({ ok: false as const, reason: 'no_text' as const, text: '' });
 
   let candidates: ApiCard[];
   try {
     candidates = await withTimeout(search(read.text), 12_000, 'Searching the card database');
   } catch (e) {
-    return {
-      ok: false, reason: 'ocr_error', text: read.text,
+    return done({
+      ok: false as const, reason: 'ocr_error' as const, text: read.text,
       errorDetail: e instanceof Error ? e.message : String(e),
-    };
+    });
   }
-  if (candidates.length === 0) return { ok: false, reason: 'no_match', text: read.text };
+  diag.candidatesFound = candidates.length;
+  if (candidates.length === 0) {
+    return done({ ok: false as const, reason: 'no_match' as const, text: read.text });
+  }
 
   const ranked = rankCandidatesByName(candidates, read.text);
+  diag.topScore = ranked[0]?.score ?? null;
+  diag.topName = ranked[0]?.apiCard.name ?? null;
   let top = ranked[0];
   let numberMatch: boolean | null = null;
   let imageSimilarity: number | null = null;
@@ -78,11 +96,13 @@ export async function identifyCard({
   // Step 2: is the name alone enough? Skip the extra OCR pass if so.
   const preliminary = computeConfidence({ nameScore: top.score, numberMatch: null, qualityScore });
   const floor = autoAcceptFloorFor(top.apiCard.marketPrice);
+  diag.autoAcceptFloor = floor;
   let settled = preliminary >= floor && isClearlyBest(ranked);
 
   if (!settled) {
     // Step 3: the printed number.
     const raw = await readCardNumber(cardPhoto);
+    diag.numberText = raw;
     const extracted = raw ? extractCardNumber(raw) : null;
     const resolved = resolveTieByNumber(ranked, extracted);
     top = resolved.top;
@@ -94,8 +114,11 @@ export async function identifyCard({
       if (idx > 0) { ranked.splice(idx, 1); ranked.unshift(top); }
     }
 
-    let confidence = computeConfidence({ nameScore: top.score, numberMatch, qualityScore });
-    settled = confidence >= autoAcceptFloorFor(top.apiCard.marketPrice) && isClearlyBest(ranked);
+    const confidence = computeConfidence({ nameScore: top.score, numberMatch, qualityScore });
+    diag.autoAcceptFloor = autoAcceptFloorFor(top.apiCard.marketPrice);
+    diag.topScore = top.score;
+    diag.topName = top.apiCard.name;
+    settled = confidence >= diag.autoAcceptFloor && isClearlyBest(ranked);
 
     // Step 4: perceptual hash, only if still unsettled and we have a reference.
     if (!settled && top.apiCard.imageUrl) {
@@ -117,12 +140,12 @@ export async function identifyCard({
     nameScore: top.score, numberMatch, qualityScore, imageSimilarity,
   });
 
-  return decide({
+  return done(decide({
     text: read.text,
     ranked,
     confidence,
     topValue: top.apiCard.marketPrice,
     numberMatch,
     imageSimilarity,
-  });
+  }));
 }

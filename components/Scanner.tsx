@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { identifyCard } from '@/lib/scanner/identify';
 import { warmUpOcr } from '@/lib/scanner/ocr-client';
-import type { ApiCard, IdentifyOutcome } from '@/lib/scanner/types';
+import type { ApiCard, IdentifyResult, ScanDiagnostics } from '@/lib/scanner/types';
 
 type Phase = 'idle' | 'camera' | 'working' | 'result';
 
@@ -30,7 +30,7 @@ export default function Scanner() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<IdentifyOutcome | null>(null);
+  const [outcome, setOutcome] = useState<IdentifyResult | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
 
   // Warm the OCR engine at load: it downloads several MB, and without this the
@@ -137,19 +137,41 @@ export default function Scanner() {
       console.warn('Guided crop failed, using full frame:', e);
     }
 
-    setPhoto(cardPhoto);
     stopCamera();
+    await run(cardPhoto, full);
+  }
+
+  /** Shared path for a camera capture and an uploaded photo. */
+  async function run(cardPhoto: string, fullFrame?: string | null) {
+    setPhoto(cardPhoto);
     setPhase('working');
     setStatus('Reading card…');
-
     try {
-      const result = await identifyCard({ cardPhoto, fullFrame: full });
+      const result = await identifyCard({ cardPhoto, fullFrame: fullFrame ?? cardPhoto });
       setOutcome(result);
       setPhase('result');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setPhase('result');
     }
+  }
+
+  /**
+   * Upload an existing photo instead of using the camera.
+   *
+   * Deliberately not a convenience feature. It makes a scan REPEATABLE: the
+   * same image can be run against the same build twice, and against the next
+   * build after a change. With the camera alone every test is a different
+   * photo, so an improvement and a lucky shot look identical.
+   */
+  function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    const reader = new FileReader();
+    reader.onload = () => { void run(String(reader.result)); };
+    reader.onerror = () => setError(`Could not read that file: ${reader.error?.message ?? 'unknown error'}`);
+    reader.readAsDataURL(file);
   }
 
   function reset() {
@@ -172,7 +194,13 @@ export default function Scanner() {
       )}
 
       {phase === 'idle' && (
-        <button onClick={startCamera} style={btn}>Scan a card</button>
+        <div>
+          <button onClick={startCamera} style={btn}>Scan a card</button>
+          <label style={{ ...ghost, display: 'block', textAlign: 'center' }}>
+            Or upload a photo
+            <input type="file" accept="image/*" onChange={onUpload} style={{ display: 'none' }} />
+          </label>
+        </div>
       )}
 
       {phase === 'camera' && (
@@ -218,7 +246,7 @@ export default function Scanner() {
 }
 
 function ResultView({ outcome, photo, onRetake }: {
-  outcome: IdentifyOutcome; photo: string | null; onRetake: () => void;
+  outcome: IdentifyResult; photo: string | null; onRetake: () => void;
 }) {
   if (outcome.ok) {
     const c = outcome.apiCard;
@@ -229,6 +257,7 @@ function ResultView({ outcome, photo, onRetake }: {
         </div>
         <CardRow card={c} />
         <button onClick={onRetake} style={{ ...btn, marginTop: 16 }}>Scan another</button>
+        <Diagnostics d={outcome.diagnostics} />
       </div>
     );
   }
@@ -288,7 +317,48 @@ function ResultView({ outcome, photo, onRetake }: {
       )}
 
       <button onClick={onRetake} style={{ ...btn, marginTop: 16 }}>Retake photo</button>
+      <Diagnostics d={outcome.diagnostics} />
     </div>
+  );
+}
+
+/**
+ * What the scanner actually saw.
+ *
+ * Every failure this project has hit was diagnosed by guesswork, because a
+ * failed scan reported only that it failed. "OCR read nothing", "OCR read
+ * FIREBREATHER instead of Charizard" and "read it correctly but 6 prints tied"
+ * are three different bugs with three different fixes, and they look identical
+ * from the outside.
+ */
+function Diagnostics({ d }: { d?: ScanDiagnostics }) {
+  if (!d) return null;
+  const rows: Array<[string, string]> = [
+    ['Text read from the card', d.ocrText ? `"${d.ocrText}"` : '(nothing readable)'],
+    ['Which crop worked', d.ocrStrategy ?? '(none succeeded)'],
+    ['Card number read', d.numberText ? `"${d.numberText.replace(/\s+/g, ' ').trim()}"` : '(not read)'],
+    ['Cards found in database', String(d.candidatesFound)],
+    ['Best match', d.topName ? `${d.topName} (name score ${d.topScore})` : '(none)'],
+    ['Score needed to auto-accept', d.autoAcceptFloor != null ? String(d.autoAcceptFloor) : '—'],
+    ['Time taken', `${(d.elapsedMs / 1000).toFixed(1)}s`],
+  ];
+  return (
+    <details style={{ marginTop: 16, fontSize: 12 }}>
+      <summary style={{ cursor: 'pointer', color: 'var(--muted)' }}>
+        What the scanner saw
+      </summary>
+      <div style={{
+        marginTop: 8, padding: 12, background: 'var(--panel)',
+        border: '1px solid var(--border)', borderRadius: 8,
+      }}>
+        {rows.map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', gap: 8, padding: '3px 0' }}>
+            <span style={{ color: 'var(--muted)', flex: '0 0 46%' }}>{k}</span>
+            <span style={{ fontFamily: 'monospace', wordBreak: 'break-word' }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
