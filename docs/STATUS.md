@@ -405,6 +405,26 @@ against the (sandbox-blocked) upstream returned the **actual** error —
 is product rule 4 working. Firing 35 requests produced 29 upstream errors then
 429s, so the limiter trips exactly where configured.
 
+### Routing — '/' is now the rebuild, '/classic' is the original
+
+Changed 2026-08-31 after field testing. The rebuild kept the original app at
+'/' while it was unproven, which was correct at the time and became wrong the
+moment the vision scanner shipped.
+
+The original can only ever run on-device OCR. Anyone opening '/' to scan a card
+was therefore testing precisely the thing that had just been replaced — which
+happened repeatedly during Sterling's testing and cost real time. Being told
+which URL to use did not fix it, because the default was simply wrong.
+
+- `/` — the rebuild, with vision recognition
+- `/classic` — the original single-file app, kept for the portfolio and
+  tournament screens that have not been ported
+- `/preview` — redirects to `/`, so older links still land correctly
+
+*Diagnostic worth remembering:* the two apps are distinguishable by their
+failure text. Only the original says **"Couldn't confidently identify this
+card"**. If that phrase appears, the classic app is being used.
+
 ### Merge safety — RESOLVED, this branch is safe to merge
 
 There was a real hazard here and it is now fixed rather than merely documented.

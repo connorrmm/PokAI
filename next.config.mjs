@@ -3,22 +3,22 @@ const nextConfig = {
   reactStrictMode: true,
 
   /**
-   * Keep the WORKING app live while the rebuild happens.
+   * '/' now serves the REBUILD; the original single-file app moved to
+   * '/classic'.
    *
-   * Vercel serves this project as a static index.html today. Adding a
-   * package.json makes it detect Next.js instead, which would otherwise
-   * replace the live scanner with whatever this app renders at '/'. That is a
-   * regression users would see immediately.
+   * The rebuild kept the old app at '/' while it was unproven, which was
+   * right at the time. It stopped being right once the vision scanner shipped:
+   * the old app can only ever run on-device OCR, so anyone landing on '/' was
+   * testing the thing we had just replaced. That happened repeatedly during
+   * field testing and cost real time, and no amount of telling people which
+   * URL to use fixed it -- the default was simply wrong.
    *
-   * So '/' keeps serving the existing single-file app (public/app.html), and
-   * the rebuild lives at '/preview' until it is genuinely better. beforeFiles
-   * runs ahead of the filesystem, so this wins over any app-router page.
-   *
-   * When the ported UI is ready: delete this rewrite and add app/page.tsx.
+   * '/classic' keeps the original reachable for its portfolio and tournament
+   * screens, which have not been ported yet.
    */
   async rewrites() {
     return {
-      beforeFiles: [{ source: '/', destination: '/app.html' }],
+      beforeFiles: [{ source: '/classic', destination: '/app.html' }],
       afterFiles: [],
       fallback: [],
     };
