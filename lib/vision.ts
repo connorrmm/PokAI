@@ -92,7 +92,10 @@ export interface VisionResult {
 }
 
 export async function readCardFromImage(
-  base64: string, mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
+  base64: string,
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
+  /** Overrides for a side-by-side comparison. Production passes neither. */
+  opts?: { model?: string; effort?: 'low' | 'medium' | 'high' },
 ): Promise<VisionResult> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
@@ -126,6 +129,7 @@ export async function readCardFromImage(
   }
   const client = new Anthropic({ apiKey: key });
   const startedAt = Date.now();
+  const model = opts?.model || MODEL;
 
   let response;
   try {
@@ -170,7 +174,7 @@ export async function readCardFromImage(
 
   return {
     read,
-    model: MODEL,
+    model,
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
     elapsedMs: Date.now() - startedAt,

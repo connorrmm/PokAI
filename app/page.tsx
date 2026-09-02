@@ -20,7 +20,11 @@ export default function Home() {
         <SetupStatus />
         <Scanner />
       </div>
-      <p style={{ marginTop: 40, fontSize: 12, color: 'var(--muted)' }}>
+      <p style={{ marginTop: 32, fontSize: 12, color: 'var(--muted)' }}>
+        <a href="/compare">Compare models on one photo</a> — measures accuracy, cost
+        and speed across every option, on the same image.
+      </p>
+      <p style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)' }}>
         Portfolio and tournaments are not ported yet — they are in the{' '}
         <a href="/classic">classic app</a>, which uses the older on-device
         reader and cannot identify cards as accurately.
