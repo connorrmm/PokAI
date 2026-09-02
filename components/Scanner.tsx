@@ -32,6 +32,9 @@ export default function Scanner() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** A degraded-but-working state is NOT an error. Showing "Something went
+   *  wrong" in red for a fallback made a working scan look broken. */
+  const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<IdentifyResult | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [vision, setVision] = useState<CardRead | null>(null);
@@ -155,6 +158,8 @@ export default function Scanner() {
   async function run(cardPhoto: string, fullFrame?: string | null) {
     setPhoto(cardPhoto);
     setVision(null);
+    setNotice(null);
+    setError(null);
     setPhase('working');
     setStatus('Reading card…');
 
@@ -174,7 +179,13 @@ export default function Scanner() {
         setPhase('result');
         // Surface why the better path was skipped, rather than silently
         // serving worse results and letting it look like poor accuracy.
-        setError(`Used fallback on-device reading because the vision service failed: ${msg}`);
+        // A NOTICE, not an error: the scan ran, just with the weaker reader.
+        setNotice(
+          msg.includes('ANTHROPIC_API_KEY')
+            ? 'Scanned with the older on-device reader, which struggles with real photos. '
+              + 'The AI vision model is not switched on yet: ANTHROPIC_API_KEY is missing from the server settings.'
+            : `Scanned with the older on-device reader because the vision service was unavailable: ${msg}`,
+        );
         return;
       } catch (e2) {
         setError(e2 instanceof Error ? e2.message : String(e2));
@@ -202,11 +213,22 @@ export default function Scanner() {
   }
 
   function reset() {
-    setOutcome(null); setPhoto(null); setError(null); setVision(null); setPhase('idle');
+    setOutcome(null); setPhoto(null); setError(null); setNotice(null);
+    setVision(null); setPhase('idle');
   }
 
   return (
     <div>
+      {notice && (
+        <div style={{
+          background: 'rgba(255,194,77,0.10)', border: '1px solid rgba(255,194,77,0.35)',
+          borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13, lineHeight: 1.5,
+        }}>
+          <strong style={{ color: '#FFC24D' }}>Reduced accuracy</strong>
+          <div style={{ marginTop: 6, opacity: 0.9 }}>{notice}</div>
+        </div>
+      )}
+
       {error && (
         <div style={{
           background: 'rgba(232,72,58,0.12)', border: '1px solid rgba(232,72,58,0.4)',
