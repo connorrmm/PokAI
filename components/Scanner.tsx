@@ -182,8 +182,9 @@ export default function Scanner() {
         // A NOTICE, not an error: the scan ran, just with the weaker reader.
         setNotice(
           msg.includes('ANTHROPIC_API_KEY')
-            ? 'Scanned with the older on-device reader, which struggles with real photos. '
-              + 'The AI vision model is not switched on yet: ANTHROPIC_API_KEY is missing from the server settings.'
+            // The validation messages in lib/vision.ts are already written for
+            // a human, so pass them through rather than burying them.
+            ? `Scanned with the older on-device reader, which struggles with real photos. ${msg}`
             : `Scanned with the older on-device reader because the vision service was unavailable: ${msg}`,
         );
         return;

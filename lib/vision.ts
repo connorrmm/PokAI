@@ -86,6 +86,31 @@ export async function readCardFromImage(
     // Rule 4: name the real cause.
     throw new Error('ANTHROPIC_API_KEY is not set in the server environment');
   }
+
+  // A key can be present and still unusable, and the failure it produces is
+  // unreadable: putting a non-ASCII character in an HTTP header throws
+  // "Cannot convert argument to a ByteString ... value of 8226", which tells
+  // the person who set it nothing at all.
+  //
+  // 8226 is a bullet. It gets there by copying the key out of a hosting
+  // dashboard, which MASKS saved values as dots -- so what gets pasted is the
+  // mask, not the key. Catch that specifically and say so.
+  const masked = /[\u2022\u00b7\u2219\u25cf\u002a]{3,}/.test(key);
+  const nonAscii = /[^\x20-\x7E]/.test(key);
+  if (masked || nonAscii) {
+    throw new Error(
+      'ANTHROPIC_API_KEY looks corrupted -- it contains hidden or non-text characters. '
+      + 'This usually means it was copied from the hosting dashboard, which masks saved '
+      + 'values as dots, so the dots got saved instead of the key. Re-copy the real key '
+      + 'from its original source and paste it in again.',
+    );
+  }
+  if (!key.startsWith('sk-ant-')) {
+    throw new Error(
+      'ANTHROPIC_API_KEY does not look like an Anthropic key (it should start with "sk-ant-"). '
+      + 'Check the value that was saved.',
+    );
+  }
   const client = new Anthropic({ apiKey: key });
   const startedAt = Date.now();
 
