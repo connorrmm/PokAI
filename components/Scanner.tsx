@@ -319,8 +319,30 @@ export default function Scanner() {
     let chosen = first;
     let lightUsed = false;
 
-    if (first.clipped >= GLARE_FRACTION && torchAvailable && !torchOn) {
-      setStatus('Glare on the number — trying with the light…');
+    // Try the light unless the first burst was already excellent.
+    //
+    // This was gated on GLARE alone and that was wrong. Flareon failed three
+    // times at 0% glare -- "too blurred and lacking contrast" -- so the retry
+    // never fired on the one card that needed it most.
+    //
+    // Glare was only ever half the mechanism. More light also means a faster
+    // shutter, which removes motion blur, and lower gain, which restores the
+    // contrast a plain rare's small dark number needs against a busy
+    // illustration. Those help whether or not anything is reflecting.
+    //
+    // The bar is set high on purpose. Every scan that has ever identified a
+    // card scored 370 or better; every failure since the corner crops shipped
+    // scored 176 or less. Being liberal costs 0.8s on a scan that was probably
+    // going to fail anyway, and the retry cannot make a scan worse, because
+    // both bursts are scored and the better one wins.
+    const GOOD_ENOUGH_SHARPNESS = 400;
+    const worthTryingLight =
+      first.clipped >= GLARE_FRACTION || first.sharpness < GOOD_ENOUGH_SHARPNESS;
+
+    if (worthTryingLight && torchAvailable && !torchOn) {
+      setStatus(first.clipped >= GLARE_FRACTION
+        ? 'Glare on the number — trying with the light…'
+        : 'Trying again with the light…');
       if (await setTorch(true)) {
         // Give auto-exposure a moment to settle, or the first frames are
         // measured mid-adjustment and score badly for the wrong reason.
