@@ -787,3 +787,52 @@ show. They never reject a scan or change what the scanner decides.
 **Not verified against a real glared card.** 56 tests pass, including a
 synthetic sharp-mirror frame that scores high for sharpness and is correctly
 ranked below a readable one.
+
+---
+
+## The light, made automatic — 2026-09-03
+
+Sterling, testing from a fixed seat under a ceiling light:
+
+> *"From where I'm sitting it's nearly impossible for it to see the number. It
+> just needs a light on it so there's no glare... It 100% works when none of
+> those things are interrupting the picture."*
+
+That is the correct read of the whole session. **The scanner does not fail
+randomly.** It fails when a reflection sits on the one part of the card that
+decides which print you own, and it works when nothing is sitting there.
+
+Why a torch beats ambient glare, since it sounds backwards: a reflection is
+fixed brightness. Adding light does not make it worse — it raises everything
+else to meet it, so the number stops being the dimmest thing under the
+brightest spot. The camera can then use a faster shutter and lower gain, which
+removes motion blur and noise at the same time.
+
+### Shipped: a second burst under the light, only when glare demands it
+
+Pressing Capture now:
+
+1. Takes six frames and scores each for sharpness and glare.
+2. **If glare is covering the number** and the device has a torch, switches it
+   on, waits for exposure to settle, and takes six more.
+3. **Keeps whichever burst scored better**, then switches the light off.
+
+Two properties worth stating.
+
+**Automatic, not a setting.** None of the above is something a user should have
+to know. The manual Light button stays for anyone who wants it.
+
+**Self-correcting, not trusted.** A light on foil can make a mirror worse —
+that was the stated reason for leaving the torch off by default, and it was
+speculation. Now it does not need to be resolved by argument: both bursts are
+scored, and if the lit frames are worse they simply lose. The mechanism cannot
+make a scan worse than not having it.
+
+It costs about 0.8s, and only on scans that were failing anyway.
+
+The diagnostics panel reports when the light was used, so its effect can be
+read off real scans rather than assumed.
+
+**Not verified.** 56 tests pass, typechecks, builds. Whether a phone torch
+actually beats a ceiling light reflection on foil is a question for a phone
+under a ceiling light.

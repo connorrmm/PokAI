@@ -180,17 +180,12 @@ export default function Scanner() {
   }
 
   async function toggleTorch() {
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track) return;
-    const next = !torchOn;
-    try {
-      await track.applyConstraints({ advanced: [{ torch: next }] } as unknown as MediaTrackConstraints);
-      setTorchOn(next);
-    } catch (e) {
+    if (!(await setTorch(!torchOn))) {
       // Rule 4: the camera refused, so say so rather than leaving a button
       // that appears to do nothing.
       setTorchAvailable(false);
-      setError(`This camera would not turn its light on: ${e instanceof Error ? e.message : String(e)}`);
+      setError('This camera would not turn its light on. Some phones only allow it for the ' +
+        'built-in camera app, not for web pages.');
     }
   }
 
@@ -234,22 +229,36 @@ export default function Scanner() {
    * pin-sharp on the artwork and useless where the small print is, and it is
    * the small print that decides which of fifty Flareons you own.
    */
-  async function capture() {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
+  /** Set the torch and say whether it took. Never throws. */
+  async function setTorch(on: boolean): Promise<boolean> {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return false;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: on }] } as unknown as MediaTrackConstraints);
+      setTorchOn(on);
+      return true;
+    } catch (e) {
+      console.warn('Torch refused:', e);
+      return false;
+    }
+  }
 
-    const FRAMES = 6;
-    const GAP_MS = 90;
+  interface Burst {
+    card: string;
+    full: string;
+    score: number;
+    sharpness: number;
+    clipped: number;
+    frames: number;
+  }
 
-    setStatus('Focusing…');
-    let best: { card: string; full: string; score: number; sharpness: number; clipped: number } | null = null;
-    let framesScored = 0;
-
-    for (let i = 0; i < FRAMES; i++) {
+  /** Take several frames and keep the best one for reading small print. */
+  async function takeBurst(video: HTMLVideoElement, frames = 6, gapMs = 90): Promise<Burst | null> {
+    let best: Burst | null = null;
+    for (let i = 0; i < frames; i++) {
       let r: { x: number; y: number; w: number; h: number } | null = null;
       try { r = getGuideVideoRect(); } catch (e) { console.warn('Guide rect failed:', e); }
       const m = r ? scoreNumberRegion(video, r) : { sharpness: 0, clipped: 0, score: 0 };
-      framesScored++;
 
       // Draw the keepers in the SAME synchronous block as the scoring, so the
       // pixels kept are the pixels measured -- the video advances between
@@ -273,19 +282,64 @@ export default function Scanner() {
             console.warn('Guided crop failed, using full frame:', e);
           }
         }
-        best = { card, full, score: m.score, sharpness: m.sharpness, clipped: m.clipped };
+        best = { card, full, score: m.score, sharpness: m.sharpness, clipped: m.clipped, frames: i + 1 };
       }
+      if (i < frames - 1) await new Promise((res) => setTimeout(res, gapMs));
+    }
+    return best ? { ...best, frames } : null;
+  }
 
-      if (i < FRAMES - 1) await new Promise((res) => setTimeout(res, GAP_MS));
+  /**
+   * Capture: a burst, and a second burst under the light if glare is blocking
+   * the number.
+   *
+   * Sterling, after testing from a fixed seat under a ceiling light: "there's
+   * glare that's covering the number, the image is not clear enough. It 100%
+   * works when none of those things are interrupting the picture." The scanner
+   * does not fail randomly -- it fails when a reflection sits on the one part
+   * of the card that decides which print you own.
+   *
+   * A torch overpowers that reflection: the ambient glare stays as bright as it
+   * was while everything else gets brighter, so the number stops being the
+   * dimmest thing under the brightest spot.
+   *
+   * Automatic rather than a setting, because the user should not have to know
+   * any of this. And SELF-CORRECTING rather than trusted: a light on foil can
+   * make a mirror worse, so both bursts are scored and the better one wins. If
+   * the light hurts, its frames simply lose.
+   */
+  async function capture() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+
+    setStatus('Focusing…');
+    const first = await takeBurst(video);
+    if (!first) return;
+
+    let chosen = first;
+    let lightUsed = false;
+
+    if (first.clipped >= GLARE_FRACTION && torchAvailable && !torchOn) {
+      setStatus('Glare on the number — trying with the light…');
+      if (await setTorch(true)) {
+        // Give auto-exposure a moment to settle, or the first frames are
+        // measured mid-adjustment and score badly for the wrong reason.
+        await new Promise((res) => setTimeout(res, 320));
+        const second = await takeBurst(video);
+        if (second && second.score > first.score) {
+          chosen = second;
+          lightUsed = true;
+        }
+        await setTorch(false);
+      }
     }
 
-    if (!best) return;
-    const chosen = best;
     stopCamera();
     await run(chosen.card, chosen.full, {
       focusScore: Math.round(chosen.sharpness),
       glareFraction: Math.round(chosen.clipped * 100) / 100,
-      framesScored,
+      framesScored: first.frames + (lightUsed ? chosen.frames : 0),
+      lightUsed,
     });
   }
 
@@ -300,7 +354,9 @@ export default function Scanner() {
   async function run(
     cardPhoto: string,
     fullFrame?: string | null,
-    captureInfo?: { focusScore: number; glareFraction: number; framesScored: number },
+    captureInfo?: {
+      focusScore: number; glareFraction: number; framesScored: number; lightUsed: boolean;
+    },
   ) {
     setPhoto(cardPhoto);
     setVision(null);
@@ -595,6 +651,10 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
       'Focus where the number is',
       `${d.focusScore}` + (d.framesScored ? ` (best of ${d.framesScored} frames)` : '') +
       (d.focusScore < READABLE_SHARPNESS ? ' — too soft for fine print' : ''),
+    ]] as Array<[string, string]>) : []),
+    ...(d.lightUsed ? ([[
+      'Light',
+      'switched on automatically, because glare was covering the number',
     ]] as Array<[string, string]>) : []),
     ...(d.glareFraction != null ? ([[
       'Glare where the number is',

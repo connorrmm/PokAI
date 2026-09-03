@@ -81,6 +81,8 @@ export interface ScanDiagnostics {
    */
   glareFraction?: number | null;
   framesScored?: number | null;
+  /** Did the scanner switch the torch on by itself to beat a reflection? */
+  lightUsed?: boolean | null;
   /**
    * How much detail the photo actually contained where the collector number
    * is printed. `digitPx` is the estimated pixel height of those digits in the
