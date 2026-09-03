@@ -121,10 +121,25 @@ export default function Scanner() {
       setPhase('camera');
       // Wait for React to render the <video> before attaching.
       requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
+        const v = videoRef.current;
+        if (!v) return;
+        v.srcObject = stream;
+        // `void play()` swallowed this rejection, and a rejected play() is
+        // exactly the failure that looks like "the camera is broken": the
+        // stream is live, permission was granted, and the element renders a
+        // black rectangle with nothing said about it. iOS in particular can
+        // refuse playback started too far from the tap that asked for it.
+        //
+        // Rule 4: say what happened.
+        v.play().catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.warn('Video playback refused:', msg);
+          setError(
+            `The camera opened but this browser would not start the preview (${msg}). ` +
+            'Tap "Scan a card" once more, or use "Or upload a photo" to scan from your ' +
+            'camera roll instead — that path does not need a live preview.',
+          );
+        });
       });
     } catch (e) {
       // Show the real reason: denied, no camera, or insecure context are very
