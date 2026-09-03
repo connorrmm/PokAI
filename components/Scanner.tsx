@@ -53,6 +53,49 @@ export default function Scanner() {
   }, []);
   useEffect(() => stopCamera, [stopCamera]);
 
+  /**
+   * Attach the live stream to the <video> once React has committed it.
+   *
+   * This was a `requestAnimationFrame` callback, which is a race. React may
+   * commit the DOM after the next animation frame, and when it does
+   * `videoRef.current` is still null, so the stream is never attached and the
+   * element paints black.
+   *
+   * The symptom is diagnostic and was reported exactly: the preview was black
+   * BUT THE FLASHLIGHT STILL WORKED. The torch is applied to the track through
+   * `streamRef`, which never depended on the element existing. A live stream
+   * plus a black preview means the camera was fine and only the wiring to the
+   * element failed.
+   *
+   * An effect cannot lose that race: it runs after the commit, so by the time
+   * this body executes the <video> is in the document.
+   */
+  useEffect(() => {
+    if (phase !== 'camera') return;
+    const v = videoRef.current;
+    const stream = streamRef.current;
+    if (!v || !stream) return;
+    // Set muted as a PROPERTY, not just the JSX attribute. React does not
+    // always reflect it onto the element, and iOS Safari refuses inline
+    // playback of anything it considers unmuted -- which is the difference
+    // between a live preview and a black rectangle.
+    v.muted = true;
+    v.setAttribute('playsinline', 'true');
+    if (v.srcObject !== stream) v.srcObject = stream;
+    // A rejected play() is the other way to get a black rectangle with nothing
+    // said about it -- iOS refuses playback started too far from the tap that
+    // asked for it. Rule 4: say what happened rather than swallow it.
+    v.play().catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('Video playback refused:', msg);
+      setError(
+        `The camera is running but this browser would not start the preview (${msg}). ` +
+        'Tap "Scan a card" again, or use "Or upload a photo" to scan from your camera ' +
+        'roll instead — that path needs no live preview.',
+      );
+    });
+  }, [phase]);
+
   async function startCamera() {
     setError(null);
     try {
@@ -118,29 +161,9 @@ export default function Scanner() {
         setTorchAvailable(false);
       }
       setTorchOn(false);
+      // The stream is attached by the effect below, once React has actually
+      // put the <video> in the document. See the note there.
       setPhase('camera');
-      // Wait for React to render the <video> before attaching.
-      requestAnimationFrame(() => {
-        const v = videoRef.current;
-        if (!v) return;
-        v.srcObject = stream;
-        // `void play()` swallowed this rejection, and a rejected play() is
-        // exactly the failure that looks like "the camera is broken": the
-        // stream is live, permission was granted, and the element renders a
-        // black rectangle with nothing said about it. iOS in particular can
-        // refuse playback started too far from the tap that asked for it.
-        //
-        // Rule 4: say what happened.
-        v.play().catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : String(e);
-          console.warn('Video playback refused:', msg);
-          setError(
-            `The camera opened but this browser would not start the preview (${msg}). ` +
-            'Tap "Scan a card" once more, or use "Or upload a photo" to scan from your ' +
-            'camera roll instead — that path does not need a live preview.',
-          );
-        });
-      });
     } catch (e) {
       // Show the real reason: denied, no camera, or insecure context are very
       // different problems and the user can only act if told which.
@@ -519,7 +542,12 @@ export default function Scanner() {
       {phase === 'camera' && (
         <div>
           <div style={{ position: 'relative' }}>
-            <video ref={videoRef} playsInline muted style={{
+            {/* autoPlay as well as the explicit play() in the effect: iOS
+                Safari starts a muted inline video by itself, so if it refuses
+                a scripted play() the element can still come up on its own.
+                playsInline is mandatory -- without it iOS takes the video
+                fullscreen instead of showing it in the page. */}
+            <video ref={videoRef} playsInline muted autoPlay style={{
               width: '100%', borderRadius: 12, background: '#000',
               aspectRatio: '3/4', objectFit: 'cover', display: 'block',
             }} />
