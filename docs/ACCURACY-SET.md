@@ -1073,3 +1073,62 @@ Worth noting for the same reason as Kangaskhan `190/165`: `088/086` is a secret
 rare whose number **exceeds its set total**. Two of the seven cards tested now
 have that shape. Any validation asserting numerator <= denominator would reject
 both, and both are among the more valuable cards in the set.
+
+---
+
+## Run 12, 2026-09-03 — the fix confirmed on the card that broke it
+
+**`Froakie - 088/086`, ME04: Chaos Rising, Illustration Rare, $7.43. Identified,
+99%.**
+
+The proof is one row in the diagnostics:
+
+> **Foil pattern read:** cosmos — 1 candidate match
+
+The pattern signal fired, and pointed at the same Cosmos Holo card as before.
+The number check overrode it. **The bug scenario reproduced exactly and was
+handled**, which is a far better confirmation than a scan where the conflict
+never arose.
+
+What the wrong answer would have cost, concretely:
+
+| | Card shown | Price |
+|---|---|---|
+| With the bug | Froakie - 056/197 (Cosmos Holo) | $0.76 |
+| Correct | Froakie - 088/086, Chaos Rising | **$7.43** |
+
+Wrong card, wrong set, wrong rarity, and a valuation out by ten times. In a
+collection of hundreds that is how a portfolio total quietly becomes fiction —
+exactly what rules 1 and 2 exist to prevent.
+
+### The model distrusted a correct read, and said why
+
+> *"'088/086' but this appears unusual (first number typically should not
+> exceed second in modern sets) — the digits are somewhat obscured."*
+
+It read the number correctly and then talked itself down to 45% certainty
+because the format looked wrong to it. It holds the same misconception this
+file warned about two entries ago, when Kangaskhan `190/165` came up.
+
+**Fixed in the prompt:** the model is now told that a number exceeding the set
+total is normal, that this is how secret rares are numbered, and not to lower
+its confidence for it.
+
+Worth noticing that this cost nothing here only because the identifying gate is
+catalog corroboration rather than the model's self-report. Had the old 80%
+floor still been the gate, a correctly read secret rare would have been
+rejected at 45% for looking unusual — and secret rares are the valuable ones.
+
+### Where the session actually ends
+
+| | |
+|---|---|
+| Cards identified outright | Kangaskhan ex (x2), **Froakie** |
+| Numbers read correctly | `190/165`, `088/086` — both secret rares |
+| Best focus score | 1297–1718 with three lights |
+| Confidently wrong answers | one, found, fixed, and regression-tested |
+| Cost | ~$0.0076 a scan |
+
+Still not solved: **plain rares photographed at an angle.** Flareon failed three
+times and is the honest measure of the product, since commons and ordinary
+rares are the bulk of any real collection.

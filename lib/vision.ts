@@ -46,7 +46,13 @@ export const CardReadSchema = z.object({
   alternate_names: z.array(z.string())
     .describe('Other plausible readings if the name is unclear, best first. Empty if confident.'),
   number: z.string().nullable()
-    .describe('Collector number as printed, e.g. "025/185". Null if unreadable.'),
+    .describe(
+      'Collector number as printed, e.g. "025/185". Null if unreadable. ' +
+      'IMPORTANT: a number LARGER than the set total, such as "088/086" or ' +
+      '"190/165", is normal and correct -- that is how secret rares are ' +
+      'numbered. Report exactly what is printed and do not lower your ' +
+      'confidence because the first number exceeds the second.',
+    ),
   number_confidence: z.number().min(0).max(100)
     .describe('How certain you are of the collector number specifically, 0-100. If the digits were small, blurred or guessed from context, say so with a low number. 0 if you did not read it.'),
   set_name: z.string().nullable()
