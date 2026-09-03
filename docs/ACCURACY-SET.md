@@ -26,12 +26,12 @@ should end up verified from the physical card.
 
 | # | Card | Number | Set | Why it is in the set |
 |---|---|---|---|---|
-| 1 | Mega Pyroar ex | 015/086 | Mega Evolution era | Full art, heavy foil, large HP |
+| 1 | Mega Pyroar ex | 015/086 *verified from the card* | Mega Evolution era | Full art, heavy foil, large HP |
 | 2 | Goldeen | 118/165 | SV: 151 | Plain common — the boring case that must not break |
 | 3 | Flareon | **013/131** *verified from the card* | Prismatic Evolutions | Stage 1, ordinary rare |
-| 4 | Dipplin | 010/131 *uncertain* | Prismatic Evolutions | Uncommon, busy artwork |
+| 4 | Dipplin | 010/131 *verified from the card* | Prismatic Evolutions | Uncommon, busy artwork |
 | 5 | **Mega Greninja ex** | — | **JAPANESE** | The hard case. See below. |
-| 6 | Kangaskhan ex | 040/A063 *uncertain* | Mega Evolution | Unusual `A`-prefixed numbering |
+| 6 | Kangaskhan ex | **190/165** *verified from the card* | SV: Scarlet & Violet 151 | Secret rare: number exceeds the set total |
 
 ## What each card is actually testing
 
@@ -55,11 +55,18 @@ This raises a real product question for Sterling rather than a bug for me:
 **does PokAI support Japanese cards?** Collectors hold plenty of them. If yes,
 it needs a data source that covers them, which tcgapi.dev may not.
 
-**Card 6 (Kangaskhan ex)** — the `040/A063` format does not match the usual
-`NNN/NNN` shape. `extractCardNumber()` uses `/(\d{1,4})\s*\/\s*(\d{1,4})/`,
-which will not match a letter prefix in the denominator. **Predicted failure of
-the number signal**, meaning this card should fall back to a candidate list
-rather than being identified outright.
+**Card 6 (Kangaskhan ex)** — a secret rare, `190/165`: the card number is
+HIGHER than the set total. That shape breaks the natural assumption that a
+numerator never exceeds a denominator, and any validation written on that
+assumption would silently reject a card the collector actually owns — and
+secret rares are the expensive ones.
+
+`extractCardNumber()` handles it, because it never compares the two. Worth
+keeping as a test precisely so nobody later "fixes" it by adding that check.
+
+*(This entry previously read `040/A063`, testing "unusual A-prefixed
+numbering". That number does not exist. I misread it from a photograph and then
+wrote a paragraph of analysis about a card format I had invented.)*
 
 **Card 1 (Mega Pyroar ex)** — heavy foil across the whole card is the classic
 glare case, and the one traditional OCR could never handle.
@@ -361,3 +368,69 @@ pixels.
 Mega Pyroar matters most: the model read `075/086` and this file says `015/086`.
 That is the same `1`/`7` confusion that just turned out to be MY error on
 Flareon, so it cannot be assumed the model is the one that is wrong.
+
+---
+
+## The answer key is now verified — 2026-09-03
+
+All four readable numbers confirmed by Sterling from the physical cards.
+
+| # | Card | I recorded, from the photo | Actually printed | |
+|---|---|---|---|---|
+| 1 | Mega Pyroar ex | 015/086 | `015/086` | ✅ |
+| 3 | Flareon | 017/131 | `013/131` | ❌ |
+| 4 | Dipplin | 010/131 | `010/131` | ✅ |
+| 6 | Kangaskhan ex | 040/A063 | `190/165` | ❌ |
+
+**I read two of four wrong from a photograph.** The same failure rate I have
+been measuring the scanner against, using those readings as the standard of
+truth. This is the most important thing in this file: *the answer key was as
+unreliable as the thing it was grading, and nothing built on it could be
+believed.* Ground truth now comes from the physical card or it is not ground
+truth.
+
+The Kangaskhan error was the worse one. `040/A063` is not a real number — I
+invented it — and then wrote a paragraph analysing how `extractCardNumber()`
+would handle "A-prefixed numbering", a card format that does not exist. A wrong
+fact grew a plausible explanation around itself. Predictions in this file are
+worth exactly as much as the observations under them.
+
+### The open question from run 01, answered
+
+**Was the correct Kangaskhan ex in its 22-card list? Yes.**
+
+The card is `190/165`, and `Kangaskhan ex - 190/165, SV: Scarlet & Violet 151,
+Ultra Rare, $5.58` was 8th of the 22 offered. So the catalog is complete here
+too, and the failure was ranking, not coverage. That distinction matters: a
+coverage gap needs a new data source, while a ranking problem is ours to fix.
+
+**And the set-total ranking should fix this one outright.** Of the 22
+candidates only two are from a 165-card set — `115/165` and `190/165`. A
+correct read of the total alone takes 22 down to 2.
+
+### What each card should now do
+
+| Card | Number | Set total narrows to | Was |
+|---|---|---|---|
+| Mega Pyroar ex | 015/086 | 2 | 2 |
+| Flareon | 013/131 | 4 | 50 |
+| Dipplin | 010/131 | 4-ish | 10 |
+| Kangaskhan ex | 190/165 | **2** | 22 |
+
+These are predictions, not results, and this file has just demonstrated what
+predictions are worth. Run 04 measures them.
+
+### Corrected model accuracy on the numbers
+
+With a trustworthy key, what the model actually read:
+
+| Card | Model read | Truth | |
+|---|---|---|---|
+| Mega Pyroar ex | `075/086` | `015/086` | wrong numerator, right total |
+| Flareon | `071/131` | `013/131` | wrong numerator, right total |
+
+Two for two on the set total, nought for two on the numerator — and in both
+cases the model volunteered its doubt (*"could be 071 or possibly 041"*) rather
+than asserting. The `1` becomes a `7` both times. That is a specific,
+repeatable confusion in a specific glyph, not general blur, and it is now the
+clearest target left in number reading.
