@@ -1132,3 +1132,34 @@ rejected at 45% for looking unusual — and secret rares are the valuable ones.
 Still not solved: **plain rares photographed at an angle.** Flareon failed three
 times and is the honest measure of the product, since commons and ordinary
 rares are the bulk of any real collection.
+
+---
+
+## The app looks like PokAI again — 2026-09-03
+
+The rebuild started deliberately plain so recognition could be worked on without
+design noise. That work is far enough along, and looking unfinished is its own
+cost: a collector deciding whether to trust an app with their collection reads
+the surface before they read the accuracy.
+
+The prototype's identity is carried over rather than reinterpreted — coral
+`#E8483A` on near-black `#0A0A0D`, three warm gradient pools, translucent
+panels, a 520px phone-width frame, and Space Grotesk / IBM Plex Sans /
+JetBrains Mono.
+
+Three things done properly rather than quickly:
+
+- **Fonts are self-hosted** through `next/font` instead of fetched from Google
+  on every page load. Same typefaces, one less third-party request, and no
+  flash of fallback text.
+- **A token that never resolved.** Components referenced `var(--fg)` while the
+  stylesheet defined `--text`. Every use of it silently fell back to inherited
+  colour. Both names now exist.
+- **Rarity stripes on candidate rows.** A fifty-card list is unreadable as fifty
+  identical rows; a colour down the edge makes it scannable by shape. The
+  colours are the prototype's own tier palette.
+
+**Verified by rendering it**, not by the build passing: the page was loaded in
+Chromium and the computed styles checked — body background `rgb(10,10,13)`, the
+heading resolving to Space Grotesk, the primary button carrying the coral
+gradient.

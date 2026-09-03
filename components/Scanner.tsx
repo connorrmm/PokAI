@@ -493,8 +493,8 @@ export default function Scanner() {
 
       {phase === 'idle' && (
         <div>
-          <button onClick={startCamera} style={btn}>Scan a card</button>
-          <label style={{ ...ghost, display: 'block', textAlign: 'center' }}>
+          <button onClick={startCamera} className="btn-primary" style={btn}>Scan a card</button>
+          <label className="btn-ghost" style={{ ...ghost, display: 'block', textAlign: 'center' }}>
             Or upload a photo
             <input type="file" accept="image/*" onChange={onUpload} style={{ display: 'none' }} />
           </label>
@@ -528,17 +528,13 @@ export default function Scanner() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={capture} style={{ ...btn, flex: 1 }}>Capture</button>
+            <button onClick={capture} className="btn-primary" style={{ ...btn, flex: 1 }}>Capture</button>
             {torchAvailable && (
               <button
                 onClick={toggleTorch}
                 aria-pressed={torchOn}
-                style={{
-                  ...btn, flex: '0 0 auto', padding: '0 16px',
-                  background: torchOn ? 'var(--accent)' : 'var(--panel)',
-                  color: torchOn ? '#000' : 'var(--fg)',
-                  border: '1px solid var(--border)',
-                }}
+                className={torchOn ? 'btn-primary' : 'btn-ghost'}
+                style={{ ...btn, flex: '0 0 auto', width: 'auto', padding: '0 18px' }}
               >
                 {torchOn ? 'Light on' : 'Light off'}
               </button>
@@ -550,7 +546,7 @@ export default function Scanner() {
               is hardest to read.
             </p>
           )}
-          <button onClick={() => { stopCamera(); setPhase('idle'); }} style={ghost}>Cancel</button>
+          <button onClick={() => { stopCamera(); setPhase('idle'); }} className="btn-ghost" style={ghost}>Cancel</button>
         </div>
       )}
 
@@ -576,7 +572,7 @@ function ResultView({ outcome, photo, vision, onRetake }: {
           Identified · {outcome.confidence}% confidence
         </div>
         <CardRow card={c} />
-        <button onClick={onRetake} style={{ ...btn, marginTop: 16 }}>Scan another</button>
+        <button onClick={onRetake} className="btn-primary" style={{ ...btn, marginTop: 16 }}>Scan another</button>
         <Diagnostics d={outcome.diagnostics} vision={vision} />
       </div>
     );
@@ -636,7 +632,7 @@ function ResultView({ outcome, photo, vision, onRetake }: {
         </div>
       )}
 
-      <button onClick={onRetake} style={{ ...btn, marginTop: 16 }}>Retake photo</button>
+      <button onClick={onRetake} className="btn-primary" style={{ ...btn, marginTop: 16 }}>Retake photo</button>
       <Diagnostics d={outcome.diagnostics} vision={vision} />
     </div>
   );
@@ -730,7 +726,7 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
         {rows.map(([k, v]) => (
           <div key={k} style={{ display: 'flex', gap: 8, padding: '3px 0' }}>
             <span style={{ color: 'var(--muted)', flex: '0 0 46%' }}>{k}</span>
-            <span style={{ fontFamily: 'monospace', wordBreak: 'break-word' }}>{v}</span>
+            <span className="mono" style={{ wordBreak: 'break-word' }}>{v}</span>
           </div>
         ))}
       </div>
@@ -738,12 +734,26 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
   );
 }
 
+/**
+ * The colour a collector already associates with a rarity. Used as a stripe
+ * down the edge of a row, which makes a long candidate list scannable by shape
+ * rather than by reading every line.
+ */
+function tierColour(rarity: string | null | undefined): string {
+  const r = (rarity || '').toLowerCase();
+  if (r.includes('secret') || r.includes('illustration')) return 'var(--tier-secret)';
+  if (r.includes('holo') || r.includes('ultra') || r.includes('double')) return 'var(--tier-holo)';
+  if (r.includes('rare')) return 'var(--tier-rare)';
+  if (r.includes('uncommon')) return 'var(--tier-uncommon)';
+  return 'var(--tier-common)';
+}
+
 function CardRow({ card }: { card: ApiCard }) {
   const age = priceAge(card);
   return (
-    <div style={{
+    <div className="card-row" style={{
       display: 'flex', gap: 12, alignItems: 'center', padding: 10,
-      background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10,
+      borderLeft: `3px solid ${tierColour(card.rarity)}`,
     }}>
       {card.imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -751,26 +761,25 @@ function CardRow({ card }: { card: ApiCard }) {
              style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />
       )}
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>{card.name}</div>
-        <div style={{ color: 'var(--muted)', fontSize: 12 }}>
+        <div className="display" style={{ fontWeight: 600, fontSize: 14 }}>{card.name}</div>
+        <div className="mono" style={{ color: 'var(--muted)', fontSize: 11 }}>
           {[card.setName, card.number, card.rarity].filter(Boolean).join(' · ')}
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{priceLabel(card)}</div>
+        <div className="mono" style={{ fontSize: 14, fontWeight: 600 }}>{priceLabel(card)}</div>
         {/* Where the number came from and when, per docs/PRODUCT.md transparency. */}
-        {age && <div style={{ color: 'var(--muted)', fontSize: 11 }}>{age}</div>}
+        {age && <div style={{ color: 'var(--muted)', fontSize: 10.5 }}>{age}</div>}
       </div>
     </div>
   );
 }
 
+/** Shape only. Colour, weight and the press animation come from `.btn-primary`
+ *  and `.btn-ghost` in globals.css, so the two buttons cannot drift apart. */
 const btn: React.CSSProperties = {
-  width: '100%', padding: '12px 16px', borderRadius: 10, border: 'none',
-  background: 'var(--accent)', color: '#04121F', fontWeight: 700, fontSize: 15, cursor: 'pointer',
+  width: '100%', padding: '16px', fontSize: 15, cursor: 'pointer',
 };
 const ghost: React.CSSProperties = {
-  width: '100%', padding: '10px 16px', borderRadius: 10, marginTop: 8,
-  background: 'transparent', color: 'var(--muted)',
-  border: '1px solid var(--border)', fontSize: 14, cursor: 'pointer',
+  width: '100%', padding: '13px 16px', marginTop: 8, fontSize: 14, cursor: 'pointer',
 };
