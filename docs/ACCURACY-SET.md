@@ -32,6 +32,7 @@ should end up verified from the physical card.
 | 4 | Dipplin | 010/131 *verified from the card* | Prismatic Evolutions | Uncommon, busy artwork |
 | 5 | **Mega Greninja ex** | — | **JAPANESE** | The hard case. See below. |
 | 6 | Kangaskhan ex | **190/165** *verified from the card* | SV: Scarlet & Violet 151 | Secret rare: number exceeds the set total |
+| 7 | Froakie | **088/086** *verified from the card* | Cosmos Holo promo | Second secret rare; the card the ordering bug was found on |
 
 ## What each card is actually testing
 
@@ -1051,8 +1052,24 @@ feature added to improve ranking.
 comment saying so is not enough. It was not enough here, and the comment was
 mine, written an hour before it failed.
 
-### Still unknown
+### Confirmed: the read was correct. The bug threw away a right answer.
 
-Whether Froakie `088/086` is the real card. Sterling should check the physical
-card, as with the others. If the number was read correctly, the right card was
-in the list and the app chose past it.
+**Froakie is `088/086`**, verified from the physical card. So:
+
+- The vision model read the number **exactly right**.
+- The catalog carries that card — `numberMatches.length === 1` was true because
+  a real Froakie `088/086` was sitting in the list.
+- The app then displayed a different card.
+
+Nothing about the recognition failed. Capture, magnification, the light retry,
+the model, the catalog and the number check all worked, end to end, on a plain
+non-holo card at the best focus score ever recorded. **The only thing that
+failed was the ordering of my own ranking steps**, and it converted a correct
+identification into a confidently wrong one.
+
+With the fix, this exact scan identifies the card.
+
+Worth noting for the same reason as Kangaskhan `190/165`: `088/086` is a secret
+rare whose number **exceeds its set total**. Two of the seven cards tested now
+have that shape. Any validation asserting numerator <= denominator would reject
+both, and both are among the more valuable cards in the set.
