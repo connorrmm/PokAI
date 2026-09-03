@@ -15,7 +15,7 @@ import {
 } from '../lib/scanner/confidence';
 import { rankCandidatesByName } from '../lib/scanner/rank';
 import { numberMatchesCard, extractCardNumber, setTotalMatchesCard } from '../lib/scanner/number';
-import { sharpnessScore } from '../lib/scanner/sharpness';
+import { sharpnessScore, clippedFraction, frameScore } from '../lib/scanner/sharpness';
 import type { ApiCard, RankedCandidate } from '../lib/scanner/types';
 import {
   otsuThreshold, percentileRange, hammingDistance, hashSimilarity, toGray,
@@ -529,5 +529,59 @@ describe('sharpnessScore', () => {
 
   it('returns zero rather than throwing on a region too small to measure', () => {
     expect(sharpnessScore(img(2, 2, () => 100))).toBe(0);
+  });
+});
+
+/**
+ * Glare and blur are different problems with opposite fixes. A frame can be
+ * pin-sharp and still be a mirror -- one real scan scored 499 for sharpness
+ * and read nothing. Telling that user to hold steadier sends them to do more
+ * of what already failed.
+ */
+describe('glare detection', () => {
+  const img = (w: number, h: number, fill: (x: number, y: number) => number): ImageData => {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const v = fill(x, y);
+        const i = (y * w + x) * 4;
+        data[i] = data[i + 1] = data[i + 2] = v;
+        data[i + 3] = 255;
+      }
+    }
+    return { width: w, height: h, data, colorSpace: 'srgb' } as ImageData;
+  };
+
+  it('reports nothing clipped on an ordinary mid-tone region', () => {
+    expect(clippedFraction(img(20, 20, () => 128))).toBe(0);
+  });
+
+  it('reports fully clipped on a blown-out white region', () => {
+    expect(clippedFraction(img(20, 20, () => 255))).toBe(1);
+  });
+
+  it('measures a partial reflection', () => {
+    // Left half blown out, right half normal.
+    const f = clippedFraction(img(20, 20, (x) => (x < 10 ? 255 : 100)));
+    expect(f).toBeCloseTo(0.5, 2);
+  });
+
+  it('ranks a sharp mirror below a sharp readable frame', () => {
+    // Both are crisply edged; one is mostly blown out. This is the exact case
+    // that scored 499 and read nothing.
+    const readable = frameScore(img(40, 40, (x) => (x % 4 < 2 ? 0 : 200)));
+    const mirror = frameScore(img(40, 40, (x, y) => (y < 34 ? 255 : x % 4 < 2 ? 0 : 200)));
+    expect(mirror.sharpness).toBeGreaterThan(0);
+    expect(mirror.score).toBeLessThan(readable.score);
+  });
+
+  it('does not count coloured foil that clips in one channel only', () => {
+    const w = 10, h = 10;
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 255; data[i + 1] = 20; data[i + 2] = 20; data[i + 3] = 255;
+    }
+    const red = { width: w, height: h, data, colorSpace: 'srgb' } as ImageData;
+    expect(clippedFraction(red)).toBe(0);
   });
 });

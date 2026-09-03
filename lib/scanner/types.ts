@@ -74,6 +74,12 @@ export interface ScanDiagnostics {
    * that tells those two apart.
    */
   focusScore?: number | null;
+  /**
+   * Fraction of the number region blown out to near-white, 0..1. Separate from
+   * focus because glare and blur need opposite responses from the user: tilt
+   * the card, versus hold it closer and steadier.
+   */
+  glareFraction?: number | null;
   framesScored?: number | null;
   /**
    * How much detail the photo actually contained where the collector number

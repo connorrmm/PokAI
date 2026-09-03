@@ -736,3 +736,54 @@ reverting a decision made on three. Recorded because it may matter later.
 
 Still unmeasured: whether this holds across the other five cards, and whether
 the light is still needed now that magnification is doing the work.
+
+---
+
+## Glare, named as its own failure — 2026-09-03
+
+Sterling's diagnosis after a session of testing:
+
+> *"If there is glare and it is not clear to see the name, illustration, and
+> the number, it is almost impossible for it to catch it."*
+
+Correct, and worth writing down as a limit rather than treating as a bug. If
+the printing is not visible to a person, nothing downstream recovers it.
+
+**But the app was giving the wrong advice about it.** Every failed capture said
+the card "never came into focus", because sharpness was the only thing being
+measured. A frame can be pin-sharp and still be a mirror — run 07 scored **499**
+for sharpness and read nothing at all. Telling that user to hold steadier sends
+them to do more of what already failed. Glare and blur need opposite responses:
+tilt the card, versus hold it closer and steadier.
+
+### Shipped: measure the two separately
+
+`clippedFraction()` reports how much of the number region is blown out to
+near-white. Measured on luminance, so coloured foil that clips in one channel
+is not mistaken for a reflection.
+
+It does two jobs:
+
+1. **Frame selection is now sharpness x (1 - glare).** Ranking on sharpness
+   alone was picking frames that were crisply in focus on a white reflection.
+   Glare shifts as the hand moves, so a burst usually contains a better frame —
+   but only if the ranking can tell the difference.
+2. **The user is told which problem they actually have.** Glare: *"tilt the card
+   a few degrees to move the reflection off the number."* Blur: *"hold the card
+   so it fills the blue frame — the further away it is, the smaller the number."*
+
+That second message carries the other finding of the session. Sterling: *"I
+think I was taking the picture too far away from the frame."* That fits the
+whole record — every fix that worked (2160p capture, corner crops) bought back
+digit pixels, and filling the frame does the same thing for free. It is the one
+lever the user holds in the moment, and the app had never once mentioned it.
+
+Both numbers now appear in the diagnostics panel, so a failure can be
+attributed rather than guessed at.
+
+**Thresholds remain provisional** and are used only to choose which sentence to
+show. They never reject a scan or change what the scanner decides.
+
+**Not verified against a real glared card.** 56 tests pass, including a
+synthetic sharp-mirror frame that scores high for sharpness and is correctly
+ranked below a readable one.

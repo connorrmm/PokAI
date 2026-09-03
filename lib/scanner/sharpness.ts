@@ -65,3 +65,55 @@ export function sharpnessScore(data: ImageData): number {
  * about it costs a misleading message and nothing else.
  */
 export const READABLE_SHARPNESS = 40;
+
+/**
+ * Fraction of a region that is blown out to near-white, 0..1.
+ *
+ * Glare and blur are different problems with OPPOSITE fixes, and the scanner
+ * was telling users the wrong one. Sterling's own diagnosis after a session of
+ * testing: "if there is glare and it is not clear to see the name,
+ * illustration, and the number, it is almost impossible for it to catch it."
+ * He is right, and a frame can be pin-sharp and still be a mirror -- one scan
+ * scored 499 for sharpness and read nothing at all.
+ *
+ * Telling someone to hold steadier when the real problem is a reflection sends
+ * them to do more of what already failed. Tilting the card a few degrees moves
+ * the reflection off the print; focusing harder does nothing.
+ *
+ * Measured on luminance rather than any single channel, so coloured foil that
+ * clips in one channel but not overall is not counted as glare.
+ */
+export function clippedFraction(data: ImageData): number {
+  const { width: w, height: h, data: px } = data;
+  const n = w * h;
+  if (n === 0) return 0;
+  let clipped = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (toGray(px[i], px[i + 1], px[i + 2]) >= 245) clipped++;
+  }
+  return clipped / n;
+}
+
+/**
+ * Above this fraction of blown-out pixels, glare is the story rather than a
+ * highlight on a foil card.
+ *
+ * PROVISIONAL, like READABLE_SHARPNESS, and used only to choose which sentence
+ * to show the user. It never rejects a scan or changes what the scanner
+ * decides, so being wrong about it costs a misleading message.
+ */
+export const GLARE_FRACTION = 0.18;
+
+/**
+ * How good a frame is for reading small print: sharp, and not a mirror.
+ *
+ * Ranking on sharpness alone picked frames that were crisply in focus on a
+ * white reflection. Glare shifts slightly between frames as the hand moves, so
+ * there is usually a better one in a burst -- but only if the ranking can see
+ * the difference.
+ */
+export function frameScore(data: ImageData): { sharpness: number; clipped: number; score: number } {
+  const sharpness = sharpnessScore(data);
+  const clipped = clippedFraction(data);
+  return { sharpness, clipped, score: sharpness * (1 - clipped) };
+}

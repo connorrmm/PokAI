@@ -5,7 +5,7 @@ import { identifyWithVision } from '@/lib/scanner/identify-vision';
 import type { CardRead } from '@/lib/scanner/vision-types';
 import { warmUpOcr } from '@/lib/scanner/ocr-client';
 import type { ApiCard, IdentifyResult, ScanDiagnostics } from '@/lib/scanner/types';
-import { sharpnessScore, READABLE_SHARPNESS } from '@/lib/scanner/sharpness';
+import { frameScore, READABLE_SHARPNESS, GLARE_FRACTION } from '@/lib/scanner/sharpness';
 
 type Phase = 'idle' | 'camera' | 'working' | 'result';
 
@@ -203,19 +203,20 @@ export default function Scanner() {
   function scoreNumberRegion(
     video: HTMLVideoElement,
     r: { x: number; y: number; w: number; h: number },
-  ): number {
+  ): { sharpness: number; clipped: number; score: number } {
+    const none = { sharpness: 0, clipped: 0, score: 0 };
     const SW = 320;
     const cut = Math.round(r.h * 0.68);
     const sy = r.y + cut;
     const sh = r.h - cut;
-    if (sh < 8) return 0;
+    if (sh < 8) return none;
     const c = document.createElement('canvas');
     c.width = SW;
     c.height = Math.max(3, Math.round((sh / r.w) * SW));
     const ctx = c.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return 0;
+    if (!ctx) return none;
     ctx.drawImage(video, r.x, sy, r.w, sh, 0, 0, c.width, c.height);
-    return sharpnessScore(ctx.getImageData(0, 0, c.width, c.height));
+    return frameScore(ctx.getImageData(0, 0, c.width, c.height));
   }
 
   /**
@@ -241,19 +242,19 @@ export default function Scanner() {
     const GAP_MS = 90;
 
     setStatus('Focusing…');
-    let best: { card: string; full: string; score: number } | null = null;
+    let best: { card: string; full: string; score: number; sharpness: number; clipped: number } | null = null;
     let framesScored = 0;
 
     for (let i = 0; i < FRAMES; i++) {
       let r: { x: number; y: number; w: number; h: number } | null = null;
       try { r = getGuideVideoRect(); } catch (e) { console.warn('Guide rect failed:', e); }
-      const score = r ? scoreNumberRegion(video, r) : 0;
+      const m = r ? scoreNumberRegion(video, r) : { sharpness: 0, clipped: 0, score: 0 };
       framesScored++;
 
       // Draw the keepers in the SAME synchronous block as the scoring, so the
       // pixels kept are the pixels measured -- the video advances between
       // ticks, not within one.
-      if (!best || score > best.score) {
+      if (!best || m.score > best.score) {
         const fullCanvas = document.createElement('canvas');
         fullCanvas.width = video.videoWidth;
         fullCanvas.height = video.videoHeight;
@@ -272,7 +273,7 @@ export default function Scanner() {
             console.warn('Guided crop failed, using full frame:', e);
           }
         }
-        best = { card, full, score };
+        best = { card, full, score: m.score, sharpness: m.sharpness, clipped: m.clipped };
       }
 
       if (i < FRAMES - 1) await new Promise((res) => setTimeout(res, GAP_MS));
@@ -282,7 +283,9 @@ export default function Scanner() {
     const chosen = best;
     stopCamera();
     await run(chosen.card, chosen.full, {
-      focusScore: Math.round(chosen.score), framesScored,
+      focusScore: Math.round(chosen.sharpness),
+      glareFraction: Math.round(chosen.clipped * 100) / 100,
+      framesScored,
     });
   }
 
@@ -297,7 +300,7 @@ export default function Scanner() {
   async function run(
     cardPhoto: string,
     fullFrame?: string | null,
-    captureInfo?: { focusScore: number; framesScored: number },
+    captureInfo?: { focusScore: number; glareFraction: number; framesScored: number },
   ) {
     setPhoto(cardPhoto);
     setVision(null);
@@ -317,12 +320,22 @@ export default function Scanner() {
       // bottom of the card never came into focus" tells them what to change.
       // A NOTICE, not an error -- the scan ran, and the name alone is often
       // useful even when the number is not readable.
-      if (captureInfo && captureInfo.focusScore < READABLE_SHARPNESS) {
+      // Glare and blur need OPPOSITE responses, so name the one that actually
+      // happened. Telling someone to hold steadier when the problem is a
+      // reflection sends them to do more of what already failed (rule 4).
+      if (captureInfo && captureInfo.glareFraction >= GLARE_FRACTION) {
+        setNotice(
+          `Glare covered ${Math.round(captureInfo.glareFraction * 100)}% of the bottom of the ` +
+          `card in all ${captureInfo.framesScored} frames, which is where the collector number ` +
+          'is printed, so several prints may be offered. Tilt the card a few degrees to move ' +
+          'the reflection off the number, or turn away from the light behind you.',
+        );
+      } else if (captureInfo && captureInfo.focusScore < READABLE_SHARPNESS) {
         setNotice(
           `The bottom of the card never came into focus across ${captureInfo.framesScored} ` +
           'frames, so the collector number may not be readable and several prints may be ' +
-          'offered. Glare on foil cards is the usual cause — try tilting the card slightly, ' +
-          'or moving a little further away so the camera can focus.',
+          'offered. Hold the card so it fills the blue frame — the further away it is, the ' +
+          'smaller the number, and it is already the smallest thing on the card.',
         );
       }
       return;
@@ -582,6 +595,11 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
       'Focus where the number is',
       `${d.focusScore}` + (d.framesScored ? ` (best of ${d.framesScored} frames)` : '') +
       (d.focusScore < READABLE_SHARPNESS ? ' — too soft for fine print' : ''),
+    ]] as Array<[string, string]>) : []),
+    ...(d.glareFraction != null ? ([[
+      'Glare where the number is',
+      `${Math.round(d.glareFraction * 100)}% blown out` +
+      (d.glareFraction >= GLARE_FRACTION ? ' — reflection is covering the number' : ''),
     ]] as Array<[string, string]>) : []),
     ...(d.numberDetail ? ([[
       'Detail where the number is',
