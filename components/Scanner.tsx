@@ -28,6 +28,9 @@ function priceAge(c: ApiCard): string | null {
 
 export default function Scanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  /** Whether this camera exposes a torch at all, and whether it is lit. */
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
   const guideRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -93,6 +96,28 @@ export default function Scanner() {
       } catch (e) {
         console.warn('Continuous focus unavailable:', e);
       }
+
+      // Does this camera have a torch? Sterling found that switching the phone
+      // flash on turned an unreadable collector number into a perfect read,
+      // which fits what the failures kept saying: the bad scans complained of
+      // glare and overexposure, both symptoms of the camera fighting for light
+      // and using a slow shutter and high gain to get it. Constant light means
+      // a faster shutter, less motion blur and less noise.
+      //
+      // Non-standard, and Android Chrome supports it where iOS Safari
+      // generally does not, so the control only appears when the device
+      // actually reports the capability rather than offering a button that
+      // silently does nothing.
+      try {
+        const track = stream.getVideoTracks()[0];
+        const caps = track?.getCapabilities?.() as
+          (MediaTrackCapabilities & { torch?: boolean }) | undefined;
+        setTorchAvailable(Boolean(caps?.torch));
+      } catch (e) {
+        console.warn('Torch capability unknown:', e);
+        setTorchAvailable(false);
+      }
+      setTorchOn(false);
       setPhase('camera');
       // Wait for React to render the <video> before attaching.
       requestAnimationFrame(() => {
@@ -152,6 +177,21 @@ export default function Scanner() {
     const srcH = Math.min(video.videoHeight - srcY, guideH / coverScale);
     if (srcW < 20 || srcH < 20) return null;
     return { x: srcX, y: srcY, w: srcW, h: srcH };
+  }
+
+  async function toggleTorch() {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next }] } as unknown as MediaTrackConstraints);
+      setTorchOn(next);
+    } catch (e) {
+      // Rule 4: the camera refused, so say so rather than leaving a button
+      // that appears to do nothing.
+      setTorchAvailable(false);
+      setError(`This camera would not turn its light on: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   /**
@@ -396,7 +436,29 @@ export default function Scanner() {
               Fill the frame with the card
             </div>
           </div>
-          <button onClick={capture} style={{ ...btn, marginTop: 12 }}>Capture</button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button onClick={capture} style={{ ...btn, flex: 1 }}>Capture</button>
+            {torchAvailable && (
+              <button
+                onClick={toggleTorch}
+                aria-pressed={torchOn}
+                style={{
+                  ...btn, flex: '0 0 auto', padding: '0 16px',
+                  background: torchOn ? 'var(--accent)' : 'var(--panel)',
+                  color: torchOn ? '#000' : 'var(--fg)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {torchOn ? 'Light on' : 'Light off'}
+              </button>
+            )}
+          </div>
+          {torchAvailable && (
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+              The light helps most on shiny foil cards, where the collector number
+              is hardest to read.
+            </p>
+          )}
           <button onClick={() => { stopCamera(); setPhase('idle'); }} style={ghost}>Cancel</button>
         </div>
       )}

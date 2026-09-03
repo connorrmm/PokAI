@@ -556,3 +556,63 @@ difference between reading the number and not.
 **Not verified.** 51 tests pass and the scoring is unit-tested against
 synthetic sharp, blurred, flat and blown-out images. Whether six frames of a
 real phone camera contain a sharp one can only be found out on a phone.
+
+---
+
+## Run 06, 2026-09-03 — the first clean identification
+
+**Kangaskhan ex, identified outright. No list.**
+
+| | |
+|---|---|
+| Result | `Kangaskhan ex - 190/165`, SV: Scarlet & Violet 151, $5.58 |
+| Confidence | 99%, against a floor of 92 |
+| Number read | `190/165` — correct |
+| Model's stated certainty about it | 45% |
+| Cost | $0.0058 |
+| Time | 5.8s |
+
+Both fixes visible in one scan. The number was read, the catalog confirmed
+exactly one card carries it, and the scan was accepted — at a stated number
+certainty of 45%, which the old gate would have rejected outright and which
+happens to be correct.
+
+**Sterling turned the phone flash on.** That is what made this attempt
+readable where the previous one was not.
+
+### The flash finding, and why it fits everything else
+
+It is the single highest-value discovery of the session, and it did not come
+from the code.
+
+Every failing scan complained of the same two things: **glare and
+overexposure**. Both are symptoms of a camera short of light — it holds the
+shutter open longer (motion blur from a hand-held card) and raises gain (noise
+that swallows small print), while the ambient reflection it is fighting stays
+exactly as bright. Adding a constant, close light source lets the shutter get
+faster and the gain drop.
+
+It also explains why the same card, in the same build, seconds apart, gave a
+perfect read and then nothing. The variance was never random. It was the
+camera's exposure decisions changing between presses.
+
+### Shipped 2026-09-03 — a light toggle in the scanner
+
+A "Light on / Light off" button next to Capture, shown **only when the device
+actually reports having a torch**. Android Chrome generally does; iOS Safari
+generally does not, and a button that silently does nothing is worse than no
+button. If the camera refuses the request, the real message is shown rather
+than leaving a dead control.
+
+**Default off.** It rests on one observation, and glare on foil is a real risk
+in the other direction — a light in the wrong place makes a mirror worse. The
+honest thing is to make it easy to try, watch what it does across more cards,
+and change the default when there is something to base that on.
+
+### Note on which build this ran
+
+This scan has no "Focus where the number is" row, so it ran **before** the
+best-of-six-frames change reached the device. That improvement is still
+untested. The flash and the frame selection attack the same problem from
+different ends — one adds light, the other picks the best moment — and they
+should compound.
