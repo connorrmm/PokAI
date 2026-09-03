@@ -695,6 +695,9 @@ Set against the scan immediately before it:
 | Time | 5.1s | 3.9s |
 | Cost | $0.0056 | $0.0074 |
 
+**The light was OFF for this scan**, confirmed by Sterling. So the corner crop
+carried it alone, with nothing else to credit it to.
+
 **The failing scan was the sharper of the two.** 499 against 370, and it was the
 blurrier frame that read the number. So sharpness was not the deciding
 variable — magnification was. The corner crop is doing the work, and it can be
