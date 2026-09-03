@@ -445,6 +445,10 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
       (d.numberDetail.digitPx < 25 ? ' — too little detail to read' : ''),
     ]] as Array<[string, string]>) : []),
     ['Cards found in database', String(d.candidatesFound)],
+    ...(d.setTotalMatchCount ? ([[
+      'Ranked first by set size',
+      `${d.setTotalMatchCount} card${d.setTotalMatchCount === 1 ? '' : 's'} from a set that size`,
+    ]] as Array<[string, string]>) : []),
     ['Best match', d.topName ?? '(none)'],
     ['Confidence in this scan', d.topScore != null ? `${d.topScore}%` : '—'],
     ['Score needed to accept automatically', d.autoAcceptFloor != null ? String(d.autoAcceptFloor) : '—'],

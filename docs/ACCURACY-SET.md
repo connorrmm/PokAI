@@ -231,3 +231,82 @@ app and upload them, which captures at full sensor resolution.
 
 **Not verified.** Typechecks, builds, 36 tests pass. Whether a phone honours a
 4K request can only be found out on a phone.
+
+---
+
+## Results — run 03, 2026-09-03, capturing at 2160p
+
+### The capture fix worked exactly as predicted
+
+| | Run 02 | Run 03 |
+|---|---|---|
+| Digit height in the crop | ~21px (calculated) | **44px (measured)** |
+| Photo size | 1080p frame | **1446x2020 card crop** |
+| Number read on Flareon | not at all | `071/131` at 75% |
+
+Flareon went from "the collector number is heavily obscured, digits cannot be
+distinguished" to reading a specific number with a specific stated doubt:
+*"could be 071 or possibly 041, though 071 is most likely."* That is the
+difference between no signal and a noisy one.
+
+### It still returned all 50 candidates, for a reason worth writing down
+
+**The number was read and was still wrong.** Three sources disagree:
+
+| Source | Number |
+|---|---|
+| The model, from the photo | `071/131` |
+| This file's ground truth, read from the reference photo | `017/131` |
+| The catalog's only /131 Flareon | `013/131` |
+
+Three different numerators — and **all three agree on `/131`**. That is not
+chance. The numerator is one to three small digits where a single misread glyph
+ruins it; the set total is a fixed three-digit group repeated on every card in
+the set, and it survives glare.
+
+**Which means this file's own ground truth is suspect.** `017/131` was read by
+me from a photograph, in exactly the conditions that just produced a misread.
+It is marked as certain and probably should not be. **Sterling needs to read
+the number off the physical card**, because the accuracy set is worthless if
+its answers are guesses too.
+
+### The fix, shipped 2026-09-03 — rank by set total
+
+When the full number matches no candidate, candidates are now reordered so that
+those from a set of the right size come first. For this Flareon that is 4 cards
+out of 50: the Prismatic Evolutions print, its Master Ball and Poke Ball
+patterns, and the Cosmos Holo.
+
+**Reorder only — nothing is removed from the list.** A misread total must never
+be able to hide the right card from the user; that dead end is the exact
+failure the never-guess rule exists to prevent.
+
+Those four remaining cards are worth $0.33, $29.66, $2.16 and $1.31. They are
+the same card number in the same set and differ only by holo pattern, so the
+number cannot separate them and no amount of number-reading will. That is a
+genuine question for the user, or a future signal — the patterns are visibly
+different and a vision model can see them.
+
+### A dead code path found while reading run 03
+
+`uniquelyResolved` in `app/api/identify/route.ts` requires the number AND the
+set name to each be read at 80% certainty or better. **Set confidence has been
+15%, 15%, 15%, 15%, 15% and 35% across every scan ever recorded.** Set symbols
+are small printed icons and the model has never once read one.
+
+So that branch can never execute. It is a gate built with a lock that has no
+key. Auto-accept still works by the other path (`isClearlyBest`), which is how
+the Eevee ex was identified at 99%, so nothing is broken — the extra path
+simply never fires.
+
+**Deliberately not fixed yet.** The obvious change is to let a confidently-read
+number identify a card alone. But both numbers read so far were WRONG, at 65%
+and 75% — and the 80% floor correctly rejected both. Two data points is not
+enough to bet the never-guess rule on. The decision needs a scan that reports
+80%+ number certainty, checked against the physical card. Recorded here so it
+is a decision rather than an oversight.
+
+### Cost
+
+$0.0057 a scan (4,726 in / 188 out), up from $0.0035 before the bottom strip.
+The rise is the strip plus the larger source photo. Still under a cent.

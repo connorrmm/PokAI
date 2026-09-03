@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { readCardFromImage } from '@/lib/vision';
 import { searchCards, TcgApiError } from '@/lib/tcgapi';
 import { rankCandidatesByName } from '@/lib/scanner/rank';
-import { numberMatchesCard, extractCardNumber } from '@/lib/scanner/number';
+import { numberMatchesCard, extractCardNumber, setTotalMatchesCard } from '@/lib/scanner/number';
 import { computeConfidence, autoAcceptFloorFor, isClearlyBest } from '@/lib/scanner/confidence';
 import { decide } from '@/lib/scanner/decide';
 import { rateLimit, clientKey } from '@/lib/rate-limit';
@@ -120,6 +120,26 @@ export async function POST(req: Request) {
       }
     }
 
+    // When the full number matches nothing, fall back to the SET TOTAL.
+    //
+    // A Flareon read as `071/131` matched none of its 50 candidates, because
+    // no Flareon carries 071. But four of them are `013/131`, and `/131` was
+    // the one part of the read that every source agreed on. Ranking by the
+    // total puts those four at the top instead of leaving the user to scroll
+    // fifty near-identical rows.
+    //
+    // Reorder only. The list still contains every candidate, because a misread
+    // total must never be able to hide the right card -- that is the dead end
+    // the never-guess rule exists to prevent.
+    let setTotalMatches: RankedCandidate[] = [];
+    if (extracted && numberMatches.length === 0) {
+      const byTotal = ranked.filter((r) => setTotalMatchesCard(extracted, r.apiCard.number) === true);
+      if (byTotal.length > 0 && byTotal.length < ranked.length) {
+        setTotalMatches = byTotal;
+        ranked = [...byTotal, ...ranked.filter((r) => !byTotal.includes(r))];
+      }
+    }
+
     // Set name, when legible, breaks remaining ties.
     if (read.set_name) {
       const want = read.set_name.toLowerCase();
@@ -180,6 +200,7 @@ export async function POST(req: Request) {
         signalCertaintyFloor: SIGNAL_CERTAINTY_FLOOR,
         numberMatchCount: numberMatches.length,
         setMatchCount: setMatches.length,
+        setTotalMatchCount: setTotalMatches.length,
         queriesTried: queries,
         candidatesFound: cards.length,
       },

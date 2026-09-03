@@ -14,7 +14,7 @@ import {
   AUTO_ACCEPT_FLOOR, AUTO_ACCEPT_FLOOR_HIGH_VALUE,
 } from '../lib/scanner/confidence';
 import { rankCandidatesByName } from '../lib/scanner/rank';
-import { numberMatchesCard, extractCardNumber } from '../lib/scanner/number';
+import { numberMatchesCard, extractCardNumber, setTotalMatchesCard } from '../lib/scanner/number';
 import type { ApiCard, RankedCandidate } from '../lib/scanner/types';
 import {
   otsuThreshold, percentileRange, hammingDistance, hashSimilarity, toGray,
@@ -383,5 +383,40 @@ describe('a card is resolved only on signals the model is SURE of', () => {
     });
     if (out.ok) throw new Error('should not auto-accept on shaky signals');
     expect((out as any).candidates).toHaveLength(3);
+  });
+});
+
+/**
+ * The set total is the part of a collector number that survives a bad photo.
+ * A real scan read `071/131` where the card is `013/131` -- numerator wrong,
+ * total right. These lock in that the total is usable on its own, and that it
+ * stays a RANKING signal rather than becoming a way to identify a card.
+ */
+describe('setTotalMatchesCard', () => {
+  it('matches on the total even when the numerator is wrong', () => {
+    expect(setTotalMatchesCard({ num: '71', total: '131' }, '013/131')).toBe(true);
+  });
+
+  it('rejects a card from a differently sized set', () => {
+    expect(setTotalMatchesCard({ num: '71', total: '131' }, '136/165')).toBe(false);
+  });
+
+  it('ignores leading zeros on both sides', () => {
+    expect(setTotalMatchesCard({ num: '13', total: '131' }, '013/0131')).toBe(true);
+  });
+
+  it('says nothing when the card has no total, rather than guessing', () => {
+    expect(setTotalMatchesCard({ num: '13', total: '131' }, 'SWSH041')).toBe(null);
+    expect(setTotalMatchesCard({ num: '13', total: '131' }, '167')).toBe(null);
+  });
+
+  it('says nothing when the read had no total', () => {
+    expect(setTotalMatchesCard(null, '013/131')).toBe(null);
+    expect(setTotalMatchesCard({ num: '13', total: '' }, '013/131')).toBe(null);
+  });
+
+  it('does not match a set total against a numerator', () => {
+    // '131' appearing as a card NUMBER must not look like a set of 131 cards.
+    expect(setTotalMatchesCard({ num: '13', total: '131' }, '131/198')).toBe(false);
   });
 });

@@ -55,3 +55,33 @@ export function numberMatchesCard(
   if (cardTotal && extracted.total && cardTotal !== extracted.total) return false;
   return true;
 }
+
+/**
+ * Does the SET TOTAL alone corroborate this card? The `131` of `013/131`.
+ *
+ * This exists because of a real scan. A Flareon photographed at 44px digit
+ * height -- ample detail -- was read as `071/131`. The ground-truth note said
+ * `017/131`. The catalog says the Prismatic Evolutions Flareon is `013/131`.
+ * Three readings, three different numerators, and **all three agreed on 131**.
+ *
+ * That is not a coincidence. The numerator is one to three small digits and a
+ * single misread glyph ruins it. The total is a fixed three-digit group that
+ * repeats on every card in a set, and it is the part that survives glare.
+ *
+ * A set total is weak evidence for one card and strong evidence against most
+ * others: it cannot say WHICH Flareon you are holding, but it says that 46 of
+ * the 50 in the database are not it. Used only to rank -- never to identify a
+ * card outright, and never to remove a candidate from the list, because a
+ * misread total must not be able to hide the right card from the user.
+ */
+export function setTotalMatchesCard(
+  extracted: CardNumber | null,
+  cardNumber: string | null | undefined,
+): boolean | null {
+  if (!extracted?.total || !cardNumber) return null;
+  const parts = String(cardNumber).trim().split('/');
+  if (!parts[1]) return null;
+  const cardTotal = String(parseInt(parts[1], 10));
+  if (!cardTotal || cardTotal === 'NaN') return null;
+  return cardTotal === extracted.total;
+}

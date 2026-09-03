@@ -60,6 +60,11 @@ export interface ScanDiagnostics {
   elapsedMs: number;
   /** What this scan cost, from real token counts rather than an estimate. */
   usage?: { inputTokens: number; outputTokens: number; model: string; costUsd: number } | null;
+  /**
+   * How many candidates share the set total we read (the `131` of `013/131`),
+   * when the full number matched none. These are ranked first.
+   */
+  setTotalMatchCount?: number | null;
   /** Did the number and set together identify exactly one print? */
   uniquelyResolved?: boolean;
   /**

@@ -161,6 +161,7 @@ export async function identifyWithVision(cardPhoto: string): Promise<VisionScan>
       : (outcome?.candidates?.[0] as ApiCard | undefined)?.name ?? null,
     autoAcceptFloor: d.autoAcceptFloor ?? null,
     uniquelyResolved: Boolean(d.uniquelyResolved),
+    setTotalMatchCount: typeof d.setTotalMatchCount === 'number' ? d.setTotalMatchCount : null,
     numberDetail: strip ? {
       sourceWidth: strip.sourceWidth,
       sourceHeight: strip.sourceHeight,
