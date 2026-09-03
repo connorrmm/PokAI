@@ -671,10 +671,15 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
       (d.numberDetail.digitPx < 25 ? ' — too little detail to read' : ''),
     ]] as Array<[string, string]>) : []),
     ['Cards found in database', String(d.candidatesFound)],
-    ...(vision && vision.holo_pattern && vision.holo_pattern !== 'unknown' ? ([[
+    // Always shown, including "unknown". A missing row cannot be told apart
+    // from an undeployed build, and "the model declined to guess" is a
+    // completely different result from "this code never ran".
+    ...(vision && vision.holo_pattern ? ([[
       'Foil pattern read',
-      vision.holo_pattern.replace(/_/g, ' ') +
-      (d.patternMatchCount ? ` — ${d.patternMatchCount} candidate${d.patternMatchCount === 1 ? '' : 's'} match` : ''),
+      vision.holo_pattern === 'unknown'
+        ? 'could not tell — not enough of the foil was visible'
+        : vision.holo_pattern.replace(/_/g, ' ') +
+          (d.patternMatchCount ? ` — ${d.patternMatchCount} candidate${d.patternMatchCount === 1 ? '' : 's'} match` : ''),
     ]] as Array<[string, string]>) : []),
     ...(d.setTotalMatchCount ? ([[
       'Ranked first by set size',

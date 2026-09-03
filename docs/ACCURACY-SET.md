@@ -897,3 +897,78 @@ It can be promoted to an identifying signal when there is evidence it deserves
 to be — the same sequence the number signal went through.
 
 **Not verified.** 60 tests pass, typechecks, builds.
+
+---
+
+## Run 10, 2026-09-03 — Flareon, third attempt, and where to stop
+
+| | |
+|---|---|
+| Number read | nothing, 0% |
+| Foil pattern read | **`unknown`** — the model declined to guess |
+| Glare | 0% |
+| Focus | 135 |
+| Time | 14.6s (cold start after deploy) |
+
+The pattern signal returned `unknown`, which is the model doing exactly what it
+was told: say so rather than guess, because these prints differ by 90x. Not a
+failure of the design — but no help on this card either.
+
+The diagnostics row was hidden when the answer was `unknown`, which made a
+declined guess look identical to an undeployed build. Fixed: the row is always
+shown now. **A diagnostic that disappears when the answer is inconvenient is
+worse than none**, and this file exists because of exactly that class of
+mistake.
+
+### Focus scores are drifting down across the session
+
+| Run | 06 | 08 | 09 | 10 |
+|---|---|---|---|---|
+| Focus where the number is | 499 | 370 | 176 | **135** |
+
+Four scans, monotonically decreasing, all of the same two cards by the same
+person in the same room. That is not the app changing. Tiredness, a dimmer
+room, a hand less steady late at night — the scanner is being tested under
+progressively worse conditions, and results from here are worth less than the
+earlier ones. **Stop and re-run these fresh** rather than tuning against them.
+
+### Flareon versus Kangaskhan is the real lesson
+
+| | Kangaskhan ex `190/165` | Flareon `013/131` |
+|---|---|---|
+| Card type | full-art ultra rare | plain rare |
+| Identified outright? | **yes, twice** | no, three attempts |
+| Best number read | `190/165` correct at 85% | `012/102`, then nothing |
+
+The full-art card is *easier*, which is the opposite of the intuition that
+foils are the hard case. Its number is printed large and clear of the artwork.
+The plain rare prints its number small, low-contrast, against a busy
+illustration — and there are 50 Flareons and 4 sharing its number.
+
+`docs/PRODUCT.md` says commons and ordinary rares are the bulk of any real
+collection. **The cheap cards are the hard ones**, and the scanner should be
+judged on Flareon rather than on Kangaskhan.
+
+### Honest state at the end of the session
+
+| | |
+|---|---|
+| Identifies a full-art card outright | **yes**, repeatably |
+| Identifies a plain rare outright | **not yet** |
+| Confidently wrong answers, all runs | **zero** |
+| Correct card present in the list | **every time** |
+| Cost | ~$0.0077 a scan |
+| Digits delivered to the model | 21px → 44px → 83px |
+
+Three failure modes are now separated and reported: too small, glare, and
+angle. Every one of them tells the user what to change.
+
+### What the next session should do, in order
+
+1. **Re-run the six cards fresh**, in good light, card filling the frame. Half
+   of tonight's later data is confounded by a tired tester.
+2. **Perspective is the untouched failure mode.** "At a steep angle" appeared
+   twice. Nothing in the app corrects for it and nothing tells the user to hold
+   the card flat.
+3. **Then judge the foil-pattern signal**, which has produced exactly one
+   observation and that one was `unknown`.
