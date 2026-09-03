@@ -632,6 +632,77 @@ certainty and candidate counts against the run-01 table. If certainty is still
 Portfolio, collection, scan history, tournaments, reveal animation. Rate
 limiting is per-instance and needs shared storage before real traffic.
 
+## 13. Where to resume — 2026-09-03, end of day
+
+**The scanner works on a real phone.** That sentence was not true this morning.
+
+### What it does now
+
+| | |
+|---|---|
+| Identifies a card outright | **yes** — Kangaskhan ex `190/165`, Froakie `088/086` |
+| Reads collector numbers correctly | yes, on full-arts and secret rares |
+| Cost | ~$0.0076 a scan (**~$7.60 / 1,000**) |
+| Time | 4–6s |
+| Camera | 2160p, best of 6 frames, automatic light when a frame is weak |
+| Look | the prototype's design, restored |
+
+### What was wrong, and what fixed it
+
+Six things, in the order they were found. Every one was found by scanning real
+cards on a real phone; none was findable from the development environment.
+
+1. **The camera captured at 1080p**, making a collector number ~21px tall
+   before any processing. Now 2160p, ~44px.
+2. **The upload downscaled to 1400px**, destroying what was left. Now a
+   magnified crop of the card's corners is sent alongside, ~83px.
+3. **The full-width bottom strip** spent its pixels on rule-box text. Cropping
+   to the corners roughly doubled the digits again.
+4. **Frame choice was whatever instant the finger landed on.** Now six frames
+   are scored for sharpness and glare and the best is kept.
+5. **A ranking signal could identify a card.** Fixed and regression-tested; see
+   the entry below.
+6. **The camera preview was black on iOS.** The stream was attached inside a
+   `requestAnimationFrame` that races React's commit. Now an effect.
+
+### The one serious defect, and what it cost
+
+A foil-pattern signal added to improve *ranking* was able to reorder the list
+after the identifying step had already run, so the app displayed a $0.76 card
+in place of a $7.43 one at 99% confidence. **The first confidently wrong answer
+of the project** — the exact failure rule 1 exists to prevent.
+
+It was possible because the ranking logic lived inside an HTTP route handler
+and could not be tested; 60 tests passed throughout. **That is the same root
+cause this file records for the original single-file build.**
+
+It now lives in `lib/scanner/resolve.ts` as a pure function whose structure
+enforces the rule: **weak signals rank, strong signals identify, ranking runs
+first and identifying last**, plus an invariant that withdraws the claim if the
+card at the front is not one the evidence points at. 66 tests.
+
+### What is NOT proven
+
+- **Plain rares.** Flareon failed every attempt. Its number is small and
+  low-contrast over busy artwork, and four prints share `013/131`.
+  `docs/PRODUCT.md` says ordinary cards are the bulk of a real collection, so
+  **this is the honest measure of the product** and it is not passing.
+- **The foil-pattern signal.** One observation, and it returned `unknown`.
+- **Sample size is seven cards.** A promising signal, not a measurement.
+- **Angle.** "At a steep angle" appeared twice. Nothing corrects for it.
+
+### Next session, in order
+
+1. Re-run the six cards fresh, in good light, card filling the frame. Focus
+   scores fell 499 → 370 → 176 → 135 across the night; the later data is a
+   tired tester, not the app.
+2. Attack perspective, the untouched failure mode.
+3. Then judge the foil-pattern signal on real evidence.
+4. Port the remaining screens: portfolio, collection, scan history, tournaments.
+
+Full run-by-run detail, including every measurement quoted here, is in
+`docs/ACCURACY-SET.md`.
+
 ## Rules for whoever edits this file next
 
 1. Date it and name the commit you verified against.

@@ -1163,3 +1163,30 @@ Three things done properly rather than quickly:
 Chromium and the computed styles checked — body background `rgb(10,10,13)`, the
 heading resolving to Space Grotesk, the primary button carrying the coral
 gradient.
+
+---
+
+## The camera works on a real phone — 2026-09-03
+
+> *"The picture is perfect, it captures a good frame and scan. The camera is
+> working now and does a good job."*
+
+iPhone 17 Pro Max, Safari. The failure was a black preview, and the detail that
+solved it was that **the flashlight still turned on**. The torch is applied to
+the media track, which never needed the `<video>` element to exist, so a working
+torch proved permission was granted and the stream was live. A live stream with
+a black preview leaves only one thing broken: the wiring to the element.
+
+The stream was attached inside a `requestAnimationFrame` whose comment claimed
+it "waited for React to render the video". It did not wait — it raced. React can
+commit after that frame, leaving `videoRef.current` null, the stream unattached
+and the element black forever. An effect cannot lose that race.
+
+**Worth keeping as a debugging lesson.** The useful signal was not the failure
+but the thing that still worked next to it. Torch on, picture black, was worth
+more than any amount of reasoning about CSS.
+
+Three iOS-specific hardenings shipped alongside: `muted` set as a property
+rather than trusting React to reflect it (Safari refuses inline playback of
+anything it deems unmuted), `playsinline` forced as an attribute, and `autoPlay`
+so the element can start itself if a scripted `play()` is refused.
