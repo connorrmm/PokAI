@@ -72,47 +72,76 @@ function estimateCost(model: string | undefined, inTok: number, outTok: number):
  * Haiku, taking a scan from ~$0.0035 to ~$0.005. Worth it if it turns a
  * fifty-card list into one card.
  */
-export interface BottomStrip {
-  dataUrl: string;
-  /** Dimensions of the photo the strip was cut from. */
+export interface NumberCrops {
+  /** Bottom-left corner, where every modern card prints its number. */
+  left: string;
+  /** Bottom-right corner, where older cards print theirs. */
+  right: string;
   sourceWidth: number;
   sourceHeight: number;
   /**
    * Roughly how many pixels tall the collector number's digits are in the
-   * strip we send. A collector number is about 2% of a card's height, so this
-   * is (source height x 0.02 x scale).
+   * crops we send. A collector number is about 2% of a card's height.
    *
    * This is the number that decides whether a scan can identify a print at
-   * all, and it is worth staring at. Run 02 measured ~20px and the model
-   * called the crop "too blurry to read" on four cards out of five. It is not
-   * blur -- there was never any detail there to begin with.
+   * all. It went 21px (1080p capture) -> 44px (2160p capture) -> ~90px here.
    */
   digitPx: number;
 }
 
-export function cropBottomStrip(dataUrl: string, fraction = 0.32, maxWidth = 1568): Promise<BottomStrip | null> {
+/**
+ * Magnified crops of the two corners where a collector number can be printed.
+ *
+ * Replaces a full-width strip of the card's bottom, which spent its entire
+ * pixel budget on the parts of the card nobody needs to read. A Kangaskhan ex
+ * photographed with a focus score of 499 -- sharp, by any measure -- still came
+ * back as "too blurry and obstructed by glare and the Pokemon EX rule box".
+ * The frame was fine. The digits were simply too small in what we sent: about
+ * 48px, most of the image being rule-box text.
+ *
+ * Cropping to a corner spends the same budget on a third of the width, which
+ * roughly doubles the digits to ~90px. Two corners because placement moved:
+ * modern cards print bottom-left, older ones bottom-right. Both are sent
+ * labelled, so the model knows what it is looking at rather than hunting.
+ *
+ * The vertical extent is deliberately generous. A camera capture is padded
+ * (PAD = 0.22 in Scanner.tsx) so the card's bottom edge sits around 85% down,
+ * while an uploaded photo is usually full-bleed and the edge sits at 100%. A
+ * range that fits only the padded case would miss the number entirely on every
+ * uploaded photo -- the path that exists precisely so a scan can be repeated.
+ */
+export function cropNumberRegions(dataUrl: string, maxWidth = 1100): Promise<NumberCrops | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const sy = Math.round(img.height * (1 - fraction));
+      const TOP = 0.72;          // covers a padded capture AND a full-bleed upload
+      const SIDE = 0.37;         // a little over a third of the width
+      const sy = Math.round(img.height * TOP);
       const sh = img.height - sy;
-      if (sh < 20) { resolve(null); return; }
-      // The width cap is the whole ballgame. Digit sharpness is decided by
-      // output width divided by original width -- nothing else. 1568px is the
-      // largest edge the API keeps; anything bigger is downscaled on arrival
-      // and simply wasted. The 2x ceiling stops us paying tokens for pure
-      // interpolation when the source photo is already small.
-      const scale = Math.min(maxWidth / img.width, 2);
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * scale);
-      c.height = Math.round(sh * scale);
-      const ctx = c.getContext('2d');
-      if (!ctx) { resolve(null); return; }
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, sy, img.width, sh, 0, 0, c.width, c.height);
+      const sw = Math.round(img.width * SIDE);
+      if (sh < 20 || sw < 20) { resolve(null); return; }
+
+      const scale = Math.min(maxWidth / sw, 3);
+      const outW = Math.round(sw * scale);
+      const outH = Math.round(sh * scale);
+
+      const draw = (sx: number): string | null => {
+        const c = document.createElement('canvas');
+        c.width = outW; c.height = outH;
+        const ctx = c.getContext('2d');
+        if (!ctx) return null;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+        return c.toDataURL('image/jpeg', 0.92);
+      };
+
+      const left = draw(0);
+      const right = draw(img.width - sw);
+      if (!left || !right) { resolve(null); return; }
+
       resolve({
-        dataUrl: c.toDataURL('image/jpeg', 0.92),
+        left, right,
         sourceWidth: img.width,
         sourceHeight: img.height,
         digitPx: Math.round(img.height * 0.02 * scale),
@@ -125,17 +154,21 @@ export function cropBottomStrip(dataUrl: string, fraction = 0.32, maxWidth = 156
 
 export async function identifyWithVision(cardPhoto: string): Promise<VisionScan> {
   const startedAt = Date.now();
-  const [small, strip] = await Promise.all([
+  const [small, crops] = await Promise.all([
     downscale(cardPhoto),
     // Crop from the ORIGINAL, not the downscaled copy -- the whole point is to
     // keep resolution the downscale would have thrown away.
-    cropBottomStrip(cardPhoto),
+    cropNumberRegions(cardPhoto),
   ]);
 
   const res = await fetch('/api/identify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: small, bottomStrip: strip?.dataUrl ?? null, mediaType: 'image/jpeg' }),
+    body: JSON.stringify({
+      image: small,
+      numberCrops: crops ? { left: crops.left, right: crops.right } : null,
+      mediaType: 'image/jpeg',
+    }),
   });
 
   const json = await res.json().catch(() => null);
@@ -162,10 +195,10 @@ export async function identifyWithVision(cardPhoto: string): Promise<VisionScan>
     autoAcceptFloor: d.autoAcceptFloor ?? null,
     uniquelyResolved: Boolean(d.uniquelyResolved),
     setTotalMatchCount: typeof d.setTotalMatchCount === 'number' ? d.setTotalMatchCount : null,
-    numberDetail: strip ? {
-      sourceWidth: strip.sourceWidth,
-      sourceHeight: strip.sourceHeight,
-      digitPx: strip.digitPx,
+    numberDetail: crops ? {
+      sourceWidth: crops.sourceWidth,
+      sourceHeight: crops.sourceHeight,
+      digitPx: crops.digitPx,
     } : null,
     usage: u ? {
       inputTokens: u.inputTokens, outputTokens: u.outputTokens,

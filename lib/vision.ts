@@ -104,6 +104,11 @@ export interface VisionResult {
   elapsedMs: number;
 }
 
+/** Data URLs arrive from the browser; the API wants raw base64. */
+function strip64(dataUrl: string): string {
+  return dataUrl.replace(/^data:image\/[a-z+]+;base64,/, '');
+}
+
 export async function readCardFromImage(
   base64: string,
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
@@ -111,9 +116,9 @@ export async function readCardFromImage(
   opts?: {
     model?: string;
     effort?: 'low' | 'medium' | 'high';
-    /** High-resolution crop of the card's bottom edge, where the collector
-     *  number and set symbol are printed. See cropBottomStrip(). */
-    bottomStrip?: string | null;
+    /** Magnified crops of the two bottom corners, where a collector number
+     *  is printed. See cropNumberRegions(). */
+    numberCrops?: { left: string; right: string } | null;
   },
 ): Promise<VisionResult> {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -160,9 +165,12 @@ export async function readCardFromImage(
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-        ...(opts?.bottomStrip ? [
-          { type: 'text' as const, text: 'Second image: a magnified crop of the BOTTOM EDGE of the same card, where the collector number (e.g. "075/131") and the set symbol or code are printed. Read the number from this image, not the first one -- it has far more detail there.' },
-          { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: opts.bottomStrip.replace(/^data:image\/[a-z+]+;base64,/, '') } },
+        ...(opts?.numberCrops ? [
+          { type: 'text' as const, text: 'The next two images are magnified crops of the same card, so the small print is legible. Read the collector number from them rather than from the first image. Modern cards print it in the BOTTOM-LEFT corner (e.g. "190/165"); older cards print it in the BOTTOM-RIGHT (e.g. "4/102"). Only one of the two will have it. Report exactly the digits you can see -- if a digit is genuinely ambiguous, say so in your notes and give the alternative rather than picking one silently.' },
+          { type: 'text' as const, text: 'Bottom-LEFT corner:' },
+          { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: strip64(opts.numberCrops.left) } },
+          { type: 'text' as const, text: 'Bottom-RIGHT corner:' },
+          { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: strip64(opts.numberCrops.right) } },
         ] : []),
         { type: 'text', text: 'Identify this Pokémon card. Report honestly what you can and cannot read.' },
       ],

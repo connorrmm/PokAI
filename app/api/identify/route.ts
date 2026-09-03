@@ -38,7 +38,11 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { image?: string; bottomStrip?: string | null; mediaType?: string };
+  let body: {
+    image?: string;
+    numberCrops?: { left: string; right: string } | null;
+    mediaType?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -60,7 +64,7 @@ export async function POST(req: Request) {
 
   try {
     const vision = await readCardFromImage(image, mediaType, {
-      bottomStrip: body.bottomStrip ?? null,
+      numberCrops: body.numberCrops ?? null,
     });
     const read = vision.read;
 

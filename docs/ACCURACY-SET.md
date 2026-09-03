@@ -616,3 +616,63 @@ best-of-six-frames change reached the device. That improvement is still
 untested. The flash and the frame selection attack the same problem from
 different ends — one adds light, the other picks the best moment — and they
 should compound.
+
+---
+
+## Run 07, 2026-09-03 — sharp frame, unreadable number
+
+Kangaskhan ex, light off, best-of-six frame selection live:
+
+| | |
+|---|---|
+| **Focus where the number is** | **499** (best of 6 frames) |
+| Detail where the number is | 44px digits |
+| Number read | nothing, 0% certainty |
+| Model's account | "too blurry and obstructed by glare and the **Pokémon EX rule box**" |
+
+**499 against a threshold of 40.** The frame was sharp. Frame selection did its
+job and the number still could not be read, which settles a question that
+mattered: this is no longer a capture problem.
+
+The model's own words point at the cause. The card's bottom is dominated by the
+EX rule box — several lines of text — and the collector number is a small part
+of it. We were sending that whole width, so most of the pixel budget went to
+text nobody needs to read, leaving the digits about **48px** in the image
+actually sent.
+
+### The fix, shipped 2026-09-03 — crop to the corners
+
+The full-width bottom strip is replaced by two magnified corner crops, sent
+labelled:
+
+| | Full-width strip | Corner crops |
+|---|---|---|
+| Width of card covered | 100% | 37% |
+| Magnification | 1.08x | **2.06x** |
+| Digits in the image sent | 48px | **~90px** |
+| Tokens | 1,465 | 3,412 (two corners) |
+
+Two corners because placement moved with the era: modern cards print the number
+bottom-left, older ones bottom-right. Both are labelled so the model knows
+which it is looking at rather than hunting for it. The prompt now also asks it
+to give an alternative for any ambiguous digit rather than silently choosing —
+it has volunteered exactly that twice unprompted, and it was right to.
+
+The vertical extent is deliberately generous, covering the bottom 28%. A camera
+capture is padded so the card's bottom edge sits around 85% down the image,
+while an uploaded photo is usually full-bleed with the edge at 100%. A range
+tuned to the padded case would miss the number on every uploaded photo — the
+path that exists precisely so a scan can be repeated.
+
+**Cost: about $0.0076 a scan, up from $0.0056.** Roughly $7.60 per 1,000.
+
+### Honest note on how much this will help
+
+The one scan that worked had the same 48px digits as several that failed. The
+difference was the flash. **Light has done more than magnification so far**, and
+this change should be judged against that rather than assumed to be the answer.
+It is a real improvement to something measurably wrong, not a prediction that it
+is sufficient.
+
+**Not verified.** 51 tests pass, typechecks, builds. No real card has been
+through it.
