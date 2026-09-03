@@ -493,3 +493,66 @@ the accuracy set grows.
 
 Path B (number and set name agreeing independently) is kept for the day a set
 symbol is legible. It has still never fired.
+
+---
+
+## Run 05, 2026-09-03 — the same card, twice, two different answers
+
+| | Scan A | Scan B |
+|---|---|---|
+| Number read | `190/165` — **exactly right** | nothing |
+| Stated certainty | 45% | 0% |
+| Model's account | "quite unclear, but I read 190/165" | "severely out of focus and overexposed" |
+| Detail available | 44px digits | 44px digits |
+| Candidates offered | 22 | 22 |
+
+Same card. Same build. Same 44px of detail. Seconds apart. **The only thing
+that differed was the photograph.**
+
+This is the most useful failure in the whole set, because it rules out
+everything else. Not resolution — 44px both times. Not the model — same model,
+same prompt. Not the matching logic — it never got a number to match. Once
+capture resolution stopped being the limit, shot-to-shot variance became the
+entire problem.
+
+And a scanner that works on one press and not the next is not a product. A
+collector holding a binder of four hundred cards will not accept a coin flip.
+
+### The fix, shipped 2026-09-03 — keep the sharpest of six frames
+
+Pressing Capture now takes six frames over about half a second, scores each one
+**on the bottom of the card specifically**, and keeps the sharpest. A photo can
+be pin-sharp on the artwork and useless where the small print is, and it is the
+small print that decides which of fifty Flareons you own.
+
+The measure is the variance of the Laplacian: run an edge-detecting kernel over
+the greyscale image and see how much its output varies. Sharp images have
+strong edges in some places and none in others, so variance is high. Blurred
+images have weak edges everywhere. **Blown-out images have almost none at all**
+— which is why one number catches both of scan B's complaints, out of focus AND
+overexposed.
+
+Two things follow that matter beyond focus:
+
+1. **The user is told what actually went wrong.** When the best of six frames
+   is still too soft, the app says the bottom of the card never came into
+   focus, that glare on foil is the usual cause, and to tilt the card or move
+   back. Not "something went wrong" — rule 4.
+2. **It is now measurable.** A "Focus where the number is" row reports the
+   score of the frame kept and how many were ranked. Scans A and B look
+   identical in every existing diagnostic; this is the one that would have told
+   them apart.
+
+**The threshold is provisional and marked as such in the code.** It was chosen
+to sit under ordinary in-focus text and above a defocused crop, but nothing had
+a score until this shipped, so it is calibrated against nothing. It is used
+only to word a message to the user — never to reject a scan or change what the
+scanner decides — so being wrong about it costs a misleading sentence and
+nothing more.
+
+**Costs about half a second per scan.** Against 4.3s end to end, for the
+difference between reading the number and not.
+
+**Not verified.** 51 tests pass and the scoring is unit-tested against
+synthetic sharp, blurred, flat and blown-out images. Whether six frames of a
+real phone camera contain a sharp one can only be found out on a phone.

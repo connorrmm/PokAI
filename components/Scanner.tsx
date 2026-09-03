@@ -5,6 +5,7 @@ import { identifyWithVision } from '@/lib/scanner/identify-vision';
 import type { CardRead } from '@/lib/scanner/vision-types';
 import { warmUpOcr } from '@/lib/scanner/ocr-client';
 import type { ApiCard, IdentifyResult, ScanDiagnostics } from '@/lib/scanner/types';
+import { sharpnessScore, READABLE_SHARPNESS } from '@/lib/scanner/sharpness';
 
 type Phase = 'idle' | 'camera' | 'working' | 'result';
 
@@ -153,34 +154,96 @@ export default function Scanner() {
     return { x: srcX, y: srcY, w: srcW, h: srcH };
   }
 
+  /**
+   * Score how much fine detail sits in the bottom of the guide frame, where
+   * the collector number is printed. Small and cheap: the strip is drawn into
+   * a 320px-wide scratch canvas, because ranking frames needs relative scores,
+   * not absolute ones.
+   */
+  function scoreNumberRegion(
+    video: HTMLVideoElement,
+    r: { x: number; y: number; w: number; h: number },
+  ): number {
+    const SW = 320;
+    const cut = Math.round(r.h * 0.68);
+    const sy = r.y + cut;
+    const sh = r.h - cut;
+    if (sh < 8) return 0;
+    const c = document.createElement('canvas');
+    c.width = SW;
+    c.height = Math.max(3, Math.round((sh / r.w) * SW));
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return 0;
+    ctx.drawImage(video, r.x, sy, r.w, sh, 0, 0, c.width, c.height);
+    return sharpnessScore(ctx.getImageData(0, 0, c.width, c.height));
+  }
+
+  /**
+   * Take several frames and keep the sharpest, rather than whatever instant
+   * the user's finger landed on.
+   *
+   * Two scans of the same card, seconds apart through the same build, read
+   * `190/165` perfectly and then nothing at all -- "severely out of focus and
+   * overexposed". The code was identical; only the photo differed. Once
+   * capture resolution stopped being the limit, this variance became the whole
+   * problem, and a scanner that works on one press and not the next is not a
+   * product.
+   *
+   * Frames are ranked on the bottom of the card specifically. A photo can be
+   * pin-sharp on the artwork and useless where the small print is, and it is
+   * the small print that decides which of fifty Flareons you own.
+   */
   async function capture() {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
 
-    // The full frame, kept as a safety net: if the guided crop itself was
-    // misaligned, OCR retries against this.
-    const fullCanvas = document.createElement('canvas');
-    fullCanvas.width = video.videoWidth;
-    fullCanvas.height = video.videoHeight;
-    fullCanvas.getContext('2d')?.drawImage(video, 0, 0);
-    const full = fullCanvas.toDataURL('image/jpeg', 0.92);
+    const FRAMES = 6;
+    const GAP_MS = 90;
 
-    // The guided crop: just the card, background removed.
-    let cardPhoto = full;
-    try {
-      const r = getGuideVideoRect();
-      if (r) {
-        const c = document.createElement('canvas');
-        c.width = r.w; c.height = r.h;
-        c.getContext('2d')?.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-        cardPhoto = c.toDataURL('image/jpeg', 0.92);
+    setStatus('Focusing…');
+    let best: { card: string; full: string; score: number } | null = null;
+    let framesScored = 0;
+
+    for (let i = 0; i < FRAMES; i++) {
+      let r: { x: number; y: number; w: number; h: number } | null = null;
+      try { r = getGuideVideoRect(); } catch (e) { console.warn('Guide rect failed:', e); }
+      const score = r ? scoreNumberRegion(video, r) : 0;
+      framesScored++;
+
+      // Draw the keepers in the SAME synchronous block as the scoring, so the
+      // pixels kept are the pixels measured -- the video advances between
+      // ticks, not within one.
+      if (!best || score > best.score) {
+        const fullCanvas = document.createElement('canvas');
+        fullCanvas.width = video.videoWidth;
+        fullCanvas.height = video.videoHeight;
+        fullCanvas.getContext('2d')?.drawImage(video, 0, 0);
+        const full = fullCanvas.toDataURL('image/jpeg', 0.92);
+
+        // The guided crop: just the card, background removed.
+        let card = full;
+        if (r) {
+          try {
+            const c = document.createElement('canvas');
+            c.width = r.w; c.height = r.h;
+            c.getContext('2d')?.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+            card = c.toDataURL('image/jpeg', 0.92);
+          } catch (e) {
+            console.warn('Guided crop failed, using full frame:', e);
+          }
+        }
+        best = { card, full, score };
       }
-    } catch (e) {
-      console.warn('Guided crop failed, using full frame:', e);
+
+      if (i < FRAMES - 1) await new Promise((res) => setTimeout(res, GAP_MS));
     }
 
+    if (!best) return;
+    const chosen = best;
     stopCamera();
-    await run(cardPhoto, full);
+    await run(chosen.card, chosen.full, {
+      focusScore: Math.round(chosen.score), framesScored,
+    });
   }
 
   /**
@@ -191,7 +254,11 @@ export default function Scanner() {
    * OCR simply has nothing to match. OCR is kept as a safety net for when the
    * vision service is unreachable -- degraded recognition beats none.
    */
-  async function run(cardPhoto: string, fullFrame?: string | null) {
+  async function run(
+    cardPhoto: string,
+    fullFrame?: string | null,
+    captureInfo?: { focusScore: number; framesScored: number },
+  ) {
     setPhoto(cardPhoto);
     setVision(null);
     setNotice(null);
@@ -202,8 +269,22 @@ export default function Scanner() {
     try {
       const { result, vision: v } = await identifyWithVision(cardPhoto);
       setVision(v);
-      setOutcome(result);
+      setOutcome(captureInfo && result.diagnostics
+        ? { ...result, diagnostics: { ...result.diagnostics, ...captureInfo } }
+        : result);
       setPhase('result');
+      // Rule 4: say what was actually wrong. "Try again" teaches nothing; "the
+      // bottom of the card never came into focus" tells them what to change.
+      // A NOTICE, not an error -- the scan ran, and the name alone is often
+      // useful even when the number is not readable.
+      if (captureInfo && captureInfo.focusScore < READABLE_SHARPNESS) {
+        setNotice(
+          `The bottom of the card never came into focus across ${captureInfo.framesScored} ` +
+          'frames, so the collector number may not be readable and several prints may be ' +
+          'offered. Glare on foil cards is the usual cause — try tilting the card slightly, ' +
+          'or moving a little further away so the camera can focus.',
+        );
+      }
       return;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -435,6 +516,11 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
     ['Name read from the card', d.ocrText ? `"${d.ocrText}"` : '(nothing readable)'],
     ...(vision ? [] : ([['Which crop worked', d.ocrStrategy ?? '(none succeeded)']] as Array<[string, string]>)),
     ['Card number read', d.numberText ? `"${d.numberText.replace(/\s+/g, ' ').trim()}"` : '(not read)'],
+    ...(d.focusScore != null ? ([[
+      'Focus where the number is',
+      `${d.focusScore}` + (d.framesScored ? ` (best of ${d.framesScored} frames)` : '') +
+      (d.focusScore < READABLE_SHARPNESS ? ' — too soft for fine print' : ''),
+    ]] as Array<[string, string]>) : []),
     ...(d.numberDetail ? ([[
       'Detail where the number is',
       `${d.numberDetail.digitPx}px tall digits ` +

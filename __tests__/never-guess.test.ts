@@ -15,6 +15,7 @@ import {
 } from '../lib/scanner/confidence';
 import { rankCandidatesByName } from '../lib/scanner/rank';
 import { numberMatchesCard, extractCardNumber, setTotalMatchesCard } from '../lib/scanner/number';
+import { sharpnessScore } from '../lib/scanner/sharpness';
 import type { ApiCard, RankedCandidate } from '../lib/scanner/types';
 import {
   otsuThreshold, percentileRange, hammingDistance, hashSimilarity, toGray,
@@ -481,5 +482,52 @@ describe('a number is trusted when exactly one card carries it', () => {
     });
     expect(out.ok).toBe(false);
     if (!out.ok && 'candidates' in out) expect(out.candidates?.length ?? 0).toBe(3);
+  });
+});
+
+/**
+ * Sharpness scoring. Two scans of the same card seconds apart differed only
+ * in the photo -- one read the number perfectly, the next read nothing and
+ * called the crop "out of focus and overexposed". Picking the best of several
+ * frames needs a number that ranks them.
+ */
+describe('sharpnessScore', () => {
+  const img = (w: number, h: number, fill: (x: number, y: number) => number): ImageData => {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const v = fill(x, y);
+        const i = (y * w + x) * 4;
+        data[i] = data[i + 1] = data[i + 2] = v;
+        data[i + 3] = 255;
+      }
+    }
+    return { width: w, height: h, data, colorSpace: 'srgb' } as ImageData;
+  };
+
+  it('scores a flat image at zero — no detail, nothing to read', () => {
+    expect(sharpnessScore(img(20, 20, () => 128))).toBe(0);
+  });
+
+  it('scores a blown-out white region at zero, like the overexposed crop', () => {
+    expect(sharpnessScore(img(20, 20, () => 255))).toBe(0);
+  });
+
+  it('scores hard edges above a soft gradient', () => {
+    const stripes = sharpnessScore(img(40, 40, (x) => (x % 4 < 2 ? 0 : 255)));
+    const gradient = sharpnessScore(img(40, 40, (x) => (x / 40) * 255));
+    expect(stripes).toBeGreaterThan(gradient);
+  });
+
+  it('ranks a sharp edge above the same edge blurred', () => {
+    const sharp = sharpnessScore(img(40, 40, (x) => (x < 20 ? 0 : 255)));
+    // A ramp over 10px instead of a step: the same edge, out of focus.
+    const blurred = sharpnessScore(img(40, 40, (x) =>
+      x < 15 ? 0 : x > 25 ? 255 : ((x - 15) / 10) * 255));
+    expect(sharp).toBeGreaterThan(blurred);
+  });
+
+  it('returns zero rather than throwing on a region too small to measure', () => {
+    expect(sharpnessScore(img(2, 2, () => 100))).toBe(0);
   });
 });

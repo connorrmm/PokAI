@@ -68,6 +68,14 @@ export interface ScanDiagnostics {
   /** Did the number and set together identify exactly one print? */
   uniquelyResolved?: boolean;
   /**
+   * Sharpness of the bottom of the card in the frame actually kept, and how
+   * many frames were ranked to find it. Two scans of the same card seconds
+   * apart read the number perfectly and then not at all; this is the number
+   * that tells those two apart.
+   */
+  focusScore?: number | null;
+  framesScored?: number | null;
+  /**
    * How much detail the photo actually contained where the collector number
    * is printed. `digitPx` is the estimated pixel height of those digits in the
    * crop we sent.
