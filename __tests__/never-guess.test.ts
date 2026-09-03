@@ -18,6 +18,7 @@ import {
   numberMatchesCard, extractCardNumber, setTotalMatchesCard, holoPatternOfCard,
 } from '../lib/scanner/number';
 import { sharpnessScore, clippedFraction, frameScore } from '../lib/scanner/sharpness';
+import { resolveCandidates } from '../lib/scanner/resolve';
 import type { ApiCard, RankedCandidate } from '../lib/scanner/types';
 import {
   otsuThreshold, percentileRange, hammingDistance, hashSimilarity, toGray,
@@ -615,5 +616,116 @@ describe('holoPatternOfCard', () => {
   it('handles a missing name without throwing', () => {
     expect(holoPatternOfCard(null)).toBe('none');
     expect(holoPatternOfCard(undefined)).toBe('none');
+  });
+});
+
+/**
+ * Regression tests for a CONFIDENTLY WRONG ANSWER that shipped.
+ *
+ * A Froakie was read as `088/086`. The app displayed `Froakie - 056/197
+ * (Cosmos Holo)` at 99% and told the user "number and set agreed on exactly
+ * one card". Those are not the same number.
+ *
+ * The collector-number step found the one card carrying `088/086` and put it
+ * first; the foil-pattern step then re-sorted and moved a Cosmos Holo card to
+ * the front; then "uniquely resolved" was computed from the still-true fact
+ * that the number matched exactly one card, and the caller accepted whatever
+ * sat at position 0. A ranking-only signal displaced an identifying one.
+ *
+ * This logic lived inside an HTTP handler and so could not be tested at all,
+ * which is the same root cause the original single-file build had.
+ */
+describe('resolveCandidates', () => {
+  const rank = (cards: ApiCard[], text: string) => rankCandidatesByName(cards, text);
+  const base = {
+    number: null as string | null, numberConfidence: 0,
+    setName: null as string | null, setConfidence: 0,
+    holoPattern: 'unknown' as const,
+  };
+
+  it('does not let the foil pattern displace a card the number identified', () => {
+    // The exact Froakie shape: one card carries the number read, a DIFFERENT
+    // card matches the foil pattern.
+    const numbered = card(1, 'Froakie', '088/086', 1.0);
+    const cosmos = card(2, 'Froakie - 056/197 (Cosmos Holo)', '056/197', 0.76);
+    const out = resolveCandidates({
+      ...base,
+      ranked: rank([numbered, cosmos], 'Froakie'),
+      number: '088/086',
+      holoPattern: 'cosmos',
+    });
+    expect(out.ranked[0].apiCard.id).toBe(1);
+    expect(out.uniquelyResolved).toBe(true);
+  });
+
+  it('withdraws the claim rather than identify a card the number contradicts', () => {
+    // If anything ever does leave a mismatched card at the front, the verdict
+    // must be dropped -- never left standing over whatever happens to be there.
+    const cosmos = card(2, 'Froakie - 056/197 (Cosmos Holo)', '056/197', 0.76);
+    const out = resolveCandidates({
+      ...base,
+      ranked: rank([cosmos], 'Froakie'),
+      number: '088/086',
+      holoPattern: 'cosmos',
+    });
+    expect(out.uniquelyResolved).toBe(false);
+  });
+
+  it('will not identify a card when several prints share the number', () => {
+    // The four Prismatic Evolutions Flareons, $0.33 to $29.66. The number
+    // corroborates the group and cannot choose within it.
+    const out = resolveCandidates({
+      ...base,
+      ranked: rank([
+        card(1, 'Flareon', '013/131', 0.33),
+        card(2, 'Flareon (Master Ball Pattern)', '013/131', 29.66),
+        card(3, 'Flareon (Poke Ball Pattern)', '013/131', 2.16),
+        card(4, 'Flareon', '136/165', 0.31),
+      ], 'Flareon'),
+      number: '013/131',
+      holoPattern: 'master_ball',
+    });
+    expect(out.uniquelyResolved).toBe(false);
+    expect(out.counts.numberMatches).toBe(3);
+  });
+
+  it('ranks the foil pattern first when the number cannot choose', () => {
+    // Same four cards: pattern may REORDER inside the group it cannot identify.
+    const out = resolveCandidates({
+      ...base,
+      ranked: rank([
+        card(1, 'Flareon', '013/131', 0.33),
+        card(2, 'Flareon (Master Ball Pattern)', '013/131', 29.66),
+      ], 'Flareon'),
+      number: '013/131',
+      holoPattern: 'master_ball',
+    });
+    expect(out.ranked[0].apiCard.id).toBe(2);
+    expect(out.uniquelyResolved).toBe(false);
+  });
+
+  it('keeps every candidate in the list, whatever the reordering', () => {
+    const cards = [
+      card(1, 'Flareon', '013/131'), card(2, 'Flareon (Master Ball Pattern)', '013/131'),
+      card(3, 'Flareon', '136/165'), card(4, 'Flareon - 167 (Cosmos Holo)', '167'),
+    ];
+    const out = resolveCandidates({
+      ...base, ranked: rank(cards, 'Flareon'), number: '013/131', holoPattern: 'cosmos',
+    });
+    expect(out.ranked.length).toBe(4);
+    expect(new Set(out.ranked.map((r) => r.apiCard.id))).toEqual(new Set([1, 2, 3, 4]));
+  });
+
+  it('falls back to the set total when the number matches nothing', () => {
+    const out = resolveCandidates({
+      ...base,
+      ranked: rank([
+        card(1, 'Flareon', '136/165'), card(2, 'Flareon', '013/131'),
+      ], 'Flareon'),
+      number: '071/131',
+    });
+    expect(out.ranked[0].apiCard.id).toBe(2);
+    expect(out.uniquelyResolved).toBe(false);
+    expect(out.counts.setTotalMatches).toBe(1);
   });
 });

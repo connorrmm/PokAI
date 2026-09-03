@@ -972,3 +972,87 @@ angle. Every one of them tells the user what to change.
    the card flat.
 3. **Then judge the foil-pattern signal**, which has produced exactly one
    observation and that one was `unknown`.
+
+---
+
+## Run 11, 2026-09-03 — A CONFIDENTLY WRONG ANSWER. Stop-and-fix.
+
+**The first instance of the failure this product cannot afford.**
+
+| | |
+|---|---|
+| Number read | `088/086` |
+| Card displayed | **`Froakie - 056/197 (Cosmos Holo)`** |
+| Confidence shown | **99% — "Identified"** |
+| Diagnostics claimed | "Number + set agreed on **exactly one card**" |
+
+`088/086` and `056/197` are not the same number. The app asserted certainty
+about a card the evidence did not point at, which `docs/ACCURACY-SET.md` has
+listed since it was written as outcome 1: *"auto-accepted the wrong card. Any
+instance is a stop-and-fix."*
+
+Everything else about the scan was excellent — focus **1718**, the best ever
+recorded by a factor of three, 0% glare, and the light retry working. The
+capture pipeline did its job perfectly and the logic on top of it threw the
+result away.
+
+### Cause: a ranking signal displaced an identifying one
+
+The steps ran in this order:
+
+1. The collector-number step found the one card carrying `088/086` and moved it
+   to the front. `numberMatches.length === 1`.
+2. The **foil-pattern step**, added an hour earlier, re-sorted the list and
+   moved a Cosmos Holo card to the front.
+3. `uniquelyResolved` was then computed from the still-true fact that the
+   number matched exactly one card — and the caller accepted whatever was at
+   position 0.
+
+The verdict was made about one card and applied to another. The pattern signal
+was documented as **"RANKING ONLY, and deliberately so"**, with a comment
+explaining that identifying on it costs a collector real money. It was ranking
+only. It just ran after the thing that identifies, and nothing checked.
+
+### Why it was not caught
+
+This logic lived inside an HTTP route handler and could not be tested. Sixty
+tests passed the entire time.
+
+**That is the same root cause as the original single-file build**, recorded at
+the top of the test file: the never-guess rule could not be asserted because it
+lived inside a function that also drove the camera. The rule was extracted and
+tested; the *ranking that decides which card the rule is applied to* was not,
+and it moved back into an untestable place as it grew.
+
+### The fix
+
+`lib/scanner/resolve.ts` — the whole pipeline as one pure function, with the
+structure enforcing the rule:
+
+> **Weak signals rank. Strong signals identify. Ranking runs FIRST, identifying
+> runs LAST**, so nothing can reorder a card out from under a verdict already
+> made about it.
+
+Plus a final invariant: if a scan claims to have identified a card, the card at
+the front **must** be one the number actually matches. If it is not, the claim
+is withdrawn rather than trusted. That check alone would have turned this into
+a candidate list.
+
+Six regression tests, including this exact Froakie shape. **66 passing.**
+
+### What this costs, honestly
+
+The session's headline — *zero confidently wrong answers* — is no longer true,
+and it was the number that mattered most. It held through every hardware
+failure, every misread number and every bad photograph, and was broken by a
+feature added to improve ranking.
+
+**A signal that may only rank must be structurally unable to identify.** A
+comment saying so is not enough. It was not enough here, and the comment was
+mine, written an hour before it failed.
+
+### Still unknown
+
+Whether Froakie `088/086` is the real card. Sterling should check the physical
+card, as with the others. If the number was read correctly, the right card was
+in the list and the app chose past it.
