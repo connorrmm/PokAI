@@ -29,6 +29,18 @@ function priceAge(c: ApiCard): string | null {
 
 export default function Scanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  /**
+   * Live quality of the number region, sampled while the camera is open, and
+   * whether the scanner is allowed to fire by itself.
+   */
+  const [quality, setQuality] = useState<{ sharpness: number; clipped: number; score: number } | null>(null);
+  const [autoCapture, setAutoCapture] = useState(true);
+  const autoCaptureRef = useRef(true);
+  const autoRef = useRef<{ firing: boolean; samples: number[]; startedAt: number; gaveUp: boolean }>(
+    { firing: false, samples: [], startedAt: 0, gaveUp: false },
+  );
+  useEffect(() => { autoCaptureRef.current = autoCapture; }, [autoCapture]);
+
   /** Whether this camera exposes a torch at all, and whether it is lit. */
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
@@ -329,6 +341,85 @@ export default function Scanner() {
   }
 
   /**
+   * Watch the live preview and fire when the shot is actually good.
+   *
+   * Sterling's ask: "take the picture automatically when it feels it is a
+   * clear shot". Everything needed was already here -- every frame of a burst
+   * is scored for sharpness and glare -- it simply was not being applied to
+   * the preview.
+   *
+   * It waits for the shot to be good AND to have STOPPED IMPROVING. A phone
+   * camera hunts for focus continuously, so a frame can be passable on its way
+   * to being sharp; firing at the first acceptable frame would systematically
+   * catch the worst of the good ones. Four consecutive samples above the floor,
+   * with the newest within 12% of the best of them, means the lens has settled.
+   *
+   * The floor of 400 comes from measurements, not taste. Every scan that has
+   * identified a card scored 370 or better in this region; every failure since
+   * the corner crops shipped scored 176 or less. It is set at the bottom of
+   * the working range rather than the middle, because refusing to fire is a
+   * worse failure than firing on a merely-good frame -- the user is standing
+   * there holding a card.
+   *
+   * Never traps anyone: after 12 seconds it stops trying, says which of the
+   * two problems it sees, and leaves the manual button.
+   */
+  useEffect(() => {
+    if (phase !== 'camera') return;
+    autoRef.current = { firing: false, samples: [], startedAt: Date.now(), gaveUp: false };
+    setQuality(null);
+
+    const READY_FLOOR = 400;
+    const SETTLED_WITHIN = 0.12;
+    const NEEDED = 4;
+    const GIVE_UP_MS = 12_000;
+
+    const id = window.setInterval(() => {
+      const video = videoRef.current;
+      const st = autoRef.current;
+      if (!video || !video.videoWidth || st.firing) return;
+
+      let r: { x: number; y: number; w: number; h: number } | null = null;
+      try { r = getGuideVideoRect(); } catch { r = null; }
+      if (!r) return;
+
+      const m = scoreNumberRegion(video, r);
+      setQuality(m);
+
+      if (!autoCaptureRef.current || st.gaveUp) return;
+
+      st.samples.push(m.score);
+      if (st.samples.length > NEEDED) st.samples.shift();
+
+      if (Date.now() - st.startedAt > GIVE_UP_MS) {
+        st.gaveUp = true;
+        setNotice(
+          m.clipped >= GLARE_FRACTION
+            ? 'Waiting for a clear shot, but glare keeps covering the bottom of the card, where '
+              + 'the number is. Tilt the card a few degrees, or press Capture to go ahead anyway.'
+            : 'Waiting for a clear shot, but the card is not coming into focus. Hold it so it '
+              + 'fills the blue frame — the further away it is, the smaller the number. '
+              + 'Or press Capture to go ahead anyway.',
+        );
+        return;
+      }
+
+      if (st.samples.length < NEEDED) return;
+      if (st.samples.some((v) => v < READY_FLOOR)) return;
+      const best = Math.max(...st.samples);
+      if (best - m.score > best * SETTLED_WITHIN) return;  // still improving
+
+      st.firing = true;
+      void capture();
+    }, 180);
+
+    return () => window.clearInterval(id);
+    // capture and getGuideVideoRect are stable for the life of a camera
+    // session; re-running this on every render would restart the sampling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  /**
    * Capture: a burst, and a second burst under the light if glare is blocking
    * the number.
    *
@@ -564,15 +655,47 @@ export default function Scanner() {
                 boxShadow: '0 0 0 9999px rgba(0,0,0,0.35)',
               }} />
             </div>
+            {/* What the scanner is waiting for, in the words of the thing it
+                is actually measuring. A camera that fires by itself is
+                unnerving unless you can see it thinking. */}
             <div style={{
               position: 'absolute', bottom: 10, left: 0, right: 0, textAlign: 'center',
               fontSize: 13, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.8)', pointerEvents: 'none',
             }}>
-              Fill the frame with the card
+              {(() => {
+                if (!autoCapture) return 'Fill the frame with the card';
+                if (!quality) return 'Fill the frame with the card';
+                if (quality.clipped >= GLARE_FRACTION) return 'Glare on the number — tilt the card';
+                if (quality.score < 400) return 'Hold steady, filling the frame…';
+                return 'Ready — hold still';
+              })()}
             </div>
+            {/* A live bar rather than a number: nobody needs to know the
+                sharpness score, but everyone can see a bar filling up. */}
+            {autoCapture && quality && (
+              <div style={{
+                position: 'absolute', bottom: 4, left: 12, right: 12, height: 3,
+                borderRadius: 2, background: 'rgba(255,255,255,0.18)', pointerEvents: 'none',
+              }}>
+                <div style={{
+                  width: `${Math.min(100, Math.round((quality.score / 400) * 100))}%`,
+                  height: '100%', borderRadius: 2,
+                  background: quality.score >= 400 ? 'var(--mint)' : 'var(--accent-warm)',
+                  transition: 'width .15s linear',
+                }} />
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button onClick={capture} className="btn-primary" style={{ ...btn, flex: 1 }}>Capture</button>
+            <button
+              onClick={() => setAutoCapture((v) => !v)}
+              aria-pressed={autoCapture}
+              className={autoCapture ? 'btn-primary' : 'btn-ghost'}
+              style={{ ...btn, flex: '0 0 auto', width: 'auto', padding: '0 18px' }}
+            >
+              {autoCapture ? 'Auto' : 'Manual'}
+            </button>
             {torchAvailable && (
               <button
                 onClick={toggleTorch}

@@ -1291,3 +1291,68 @@ a four-way choice and an identification on a 100x price spread.
 
 Second, showing 50 rows when 4 are real candidates is poor. The four matching
 the number should be separated from the 46 that do not.
+
+---
+
+## Auto-capture — 2026-09-04
+
+Sterling: *"for the scanner to take the picture automatically when it feels it
+is a clear shot."*
+
+Everything needed was already there. Every frame of a capture burst was scored
+for sharpness and glare; the score was simply never applied to the live
+preview. The camera now samples the number region five times a second and fires
+on its own.
+
+### It waits for the shot to stop improving, not merely to be acceptable
+
+A phone camera hunts for focus continuously, so a frame can be passable *on its
+way* to being sharp. Firing at the first acceptable frame would systematically
+catch the worst of the good ones. It requires four consecutive samples above
+the floor with the newest within 12% of the best of them — which means the lens
+has settled rather than still climbing.
+
+### The floor comes from measurements, not taste
+
+| Scans that identified a card | 1718, 1297, 1270, 370 |
+|---|---|
+| **Failures since the corner crops shipped** | **176, 135** |
+
+The floor is **400**: the bottom of the working range, not the middle.
+Deliberately generous, because refusing to fire is a worse failure than firing
+on a merely-good frame. Someone is standing there holding a card.
+
+### Nobody gets trapped
+
+- A live bar and a line of text say what it is waiting for, in the terms it is
+  actually measuring: *"Glare on the number — tilt the card"*, *"Hold steady,
+  filling the frame…"*, *"Ready — hold still"*. A camera that fires by itself
+  is unnerving unless you can watch it think.
+- **After 12 seconds it gives up and says which problem it sees**, then leaves
+  the manual button. Waiting forever with no explanation would be the worst
+  version of this feature.
+- An **Auto / Manual** toggle, because sometimes you want to take the shot
+  yourself.
+
+### What is verified, and what is not
+
+**Verified in a browser:** the toggle renders, the live indicator updates, and
+the give-up path fires correctly — the fake camera's smooth gradient never
+reaches the floor, and after 12 seconds it explained why and left the manual
+button available. That is the safety behaviour and it works.
+
+**NOT verified: the firing path.** A fake camera cannot produce a genuinely
+sharp card, so nothing here has ever auto-captured. Whether 400 is the right
+floor on a real phone pointed at a real card is unknown, and it is the one
+number that decides whether this feels magic or broken. If it fires too eagerly
+the floor is too low; if it never fires, too high. **The diagnostics panel
+reports the score of the frame it kept**, so either way the fix is a measured
+number rather than a guess.
+
+### One expectation worth correcting
+
+A clear shot cannot produce "100% accuracy" in the sense of always naming one
+card. The four Prismatic Evolutions Flareons are four real cards consistent
+with a perfect photograph. Auto-capture removes doubt about the *photo*; it
+cannot remove ambiguity that is genuinely in the *cards*. What it does fix is
+never wondering whether a poor result was your hand or the card itself.
