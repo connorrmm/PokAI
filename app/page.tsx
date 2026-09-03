@@ -44,7 +44,7 @@ export default function Home() {
         <Scanner />
       </div>
       <p style={{ marginTop: 24, fontSize: 13 }}>
-        <a href="/collection">My collection →</a>
+        <a href="/portfolio">Portfolio →</a>{'  ·  '}<a href="/collection">My collection →</a>
       </p>
       <p style={{ marginTop: 24, fontSize: 12, color: 'var(--muted)' }}>
         <a href="/compare">Compare models on one photo</a> — measures accuracy, cost
