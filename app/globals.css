@@ -52,7 +52,8 @@ body {
     radial-gradient(800px 520px at 95% 10%, var(--bg-b), transparent 55%),
     radial-gradient(700px 480px at 50% 105%, var(--bg-c), transparent 55%),
     var(--base-bg);
-  background-attachment: fixed;
+  /* Not `background-attachment: fixed`, which forces a repaint of the whole
+   * gradient on every scroll frame on mobile and is a known jank source. */
   color: var(--fg);
   font-family: var(--font-body), system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -67,9 +68,16 @@ a { color: var(--accent-warm); }
   max-width: 520px;
   margin: 0 auto;
   min-height: 100dvh;
+  /* Deliberately NOT backdrop-filter, which the prototype used here.
+   *
+   * A blurred backdrop creates a compositing layer around everything inside
+   * it, and mobile browsers have long-standing bugs painting a live <video>
+   * inside one -- the camera opens, permission is granted, and the feed
+   * renders black. A scanner whose viewfinder is black is a broken scanner.
+   *
+   * A translucent fill over an already-soft gradient looks all but identical
+   * and cannot break the one screen that matters. */
   background: var(--glass);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   padding-top: env(safe-area-inset-top);
