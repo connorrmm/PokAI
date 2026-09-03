@@ -420,3 +420,66 @@ describe('setTotalMatchesCard', () => {
     expect(setTotalMatchesCard({ num: '13', total: '131' }, '131/198')).toBe(false);
   });
 });
+
+/**
+ * A number is trusted because the CATALOG corroborates it, not because the
+ * model says it is sure.
+ *
+ * Measured on cards read off the physical print, the model's self-reported
+ * number certainty pointed the wrong way: 45% was correct, 65% and 75% were
+ * both wrong. Matching against the database separated the same three
+ * perfectly. These lock in the behaviour that follows from that.
+ */
+describe('a number is trusted when exactly one card carries it', () => {
+  it('accepts when the read number matches exactly one candidate', () => {
+    // Kangaskhan ex: 22 candidates all named the same, one carrying 190/165.
+    const ranked = rankCandidatesByName([
+      card(1, 'Kangaskhan ex', '190/165', 5.58),
+      card(2, 'Kangaskhan ex', '115/165', 1.28),
+      card(3, 'Kangaskhan EX', '78/106', 2.75),
+    ], 'Kangaskhan ex');
+    const out = decide({
+      text: 'Kangaskhan ex', ranked, confidence: 99,
+      topValue: 5.58, numberMatch: true, uniquelyResolved: true,
+    });
+    expect(out.ok).toBe(true);
+  });
+
+  it('still asks when tied names are the only signal', () => {
+    // The same list WITHOUT a number match: names alone cannot separate them.
+    const ranked = rankCandidatesByName([
+      card(1, 'Kangaskhan ex', '190/165', 5.58),
+      card(2, 'Kangaskhan ex', '115/165', 1.28),
+    ], 'Kangaskhan ex');
+    const out = decide({
+      text: 'Kangaskhan ex', ranked, confidence: 99,
+      topValue: 5.58, numberMatch: null, uniquelyResolved: false,
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok && 'candidates' in out) expect(out.candidates?.length ?? 0).toBeGreaterThan(1);
+  });
+
+  it('does not accept a valuable card on a number match alone if confidence is short', () => {
+    // A $600 card must clear 97, not 92. A unique number match does not
+    // license skipping that -- the expensive mistakes are the expensive ones.
+    const ranked = rankCandidatesByName([card(1, 'Flareon Star', '100/108', 600)], 'Flareon Star');
+    const out = decide({
+      text: 'Flareon Star', ranked, confidence: 94,
+      topValue: 600, numberMatch: true, uniquelyResolved: true,
+    });
+    expect(out.ok).toBe(false);
+  });
+
+  it('offers the whole list, never a dead end, when it cannot resolve', () => {
+    const ranked = rankCandidatesByName([
+      card(1, 'Flareon', '013/131'), card(2, 'Flareon', '136/165'),
+      card(3, 'Flareon', '026/185'),
+    ], 'Flareon');
+    const out = decide({
+      text: 'Flareon', ranked, confidence: 59,
+      topValue: 0.33, numberMatch: false, uniquelyResolved: false,
+    });
+    expect(out.ok).toBe(false);
+    if (!out.ok && 'candidates' in out) expect(out.candidates?.length ?? 0).toBe(3);
+  });
+});

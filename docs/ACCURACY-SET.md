@@ -434,3 +434,62 @@ cases the model volunteered its doubt (*"could be 071 or possibly 041"*) rather
 than asserting. The `1` becomes a `7` both times. That is a specific,
 repeatable confusion in a specific glyph, not general blur, and it is now the
 clearest target left in number reading.
+
+---
+
+## Run 04, 2026-09-03 — the first perfectly read number, and why it still asked
+
+**Kangaskhan ex read as `190/165`. Exactly right**, confirmed against the
+physical card. The correct print ranked 1st of 22 at 99% confidence.
+
+**And the app still asked the user to pick.** Not because of the confidence
+score — 99 cleared the bar of 92 comfortably. `decide()` requires two things:
+confidence above the floor, AND one candidate standing clearly above the rest.
+All 22 candidates are named "Kangaskhan ex", so on name alone nothing stands
+out. The number was what made one stand out, and the code refused to count it
+unless the set symbol was ALSO read at 80% certainty — which has never once
+happened.
+
+### The model's certainty about numbers is not a usable signal
+
+With ground truth verified from the physical cards, its self-assessment points
+the wrong way:
+
+| Stated certainty | Read | Truth | |
+|---|---|---|---|
+| 45% | `190/165` | `190/165` | **correct** |
+| 65% | `075/086` | `015/086` | wrong |
+| 75% | `071/131` | `013/131` | wrong |
+
+The most confident read was wrong; the least confident was right. Three points
+is not a law, but it is more than enough to stop using a signal that has never
+once pointed the right way.
+
+### What replaced it: ask the catalog, not the model
+
+Check whether the number read matches exactly one card in the database. On the
+same three scans:
+
+| Read | Cards carrying that number | Verdict |
+|---|---|---|
+| `190/165` | 1 of 22 | identify it |
+| `075/086` | 0 of 2 | fall back to a list |
+| `071/131` | 0 of 50 | fall back to a list |
+
+Three for three, where self-report was nought for three. This is not a luckier
+threshold — it is a structurally better kind of evidence. A misread number
+rarely lands on a real print of the same Pokémon in a set of the same size; a
+correct one always does. It is corroboration by an independent source rather
+than a model grading its own homework.
+
+**The residual risk, stated plainly:** a misread that happens to be another
+real print of the same Pokémon in the same set would be confidently wrong. It
+usually fails safe, because prints that share a number (Master Ball and Poké
+Ball patterns) match as a group of three rather than singly and so never reach
+this branch. The auto-accept floor still applies on top, and still rises to 97
+for cards over $100. This is the one place in the scanner where being wrong is
+expensive, and it is now resting on three observations — worth revisiting as
+the accuracy set grows.
+
+Path B (number and set name agreeing independently) is kept for the day a set
+symbol is legible. It has still never fired.

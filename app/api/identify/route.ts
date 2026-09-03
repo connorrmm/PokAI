@@ -167,7 +167,41 @@ export async function POST(req: Request) {
     const setIsSolid = read.set_confidence >= SIGNAL_CERTAINTY_FLOOR;
 
     let uniquelyResolved = false;
-    if (numberIsSolid && setIsSolid && numberMatches.length > 0 && setMatches.length > 0) {
+
+    // PATH A: the catalog corroborates the number.
+    //
+    // Exactly one card in the database carries the number we read, and it is a
+    // card already matching the name. That is corroboration by an independent
+    // source, which is stronger evidence than the model's opinion of itself.
+    //
+    // This replaces a gate that asked the model how sure it was. Measured
+    // against cards read off the physical print, that self-report turned out
+    // to be worse than useless -- it pointed the wrong way:
+    //
+    //   45% certain -> `190/165`  CORRECT
+    //   65% certain -> `075/086`  wrong (really 015/086)
+    //   75% certain -> `071/131`  wrong (really 013/131)
+    //
+    // The catalog check separated the same three perfectly: the correct read
+    // matched exactly one card, and both wrong reads matched none. A misread
+    // number rarely lands on a real print of the same Pokemon in a set of the
+    // same size; a correct one always does.
+    //
+    // The residual risk is a misread that happens to be another real print of
+    // the SAME Pokemon in the SAME set -- rare, and it usually fails safe,
+    // because prints sharing a number (Master Ball and Poke Ball patterns)
+    // match as a group rather than singly and so never reach this branch.
+    // decide() still applies the auto-accept floor on top, which rises to 97
+    // for valuable cards.
+    if (numberMatches.length === 1) {
+      uniquelyResolved = true;
+      numberMatch = true;
+    }
+
+    // PATH B: number and set name independently agree on one card. Kept for
+    // when a set symbol IS legible, which so far has never happened: set
+    // confidence has been 15-35% on every scan ever recorded.
+    else if (numberIsSolid && setIsSolid && numberMatches.length > 0 && setMatches.length > 0) {
       const both = numberMatches.filter((r) => setMatches.includes(r));
       if (both.length === 1) {
         ranked = [both[0], ...ranked.filter((r) => r !== both[0])];
