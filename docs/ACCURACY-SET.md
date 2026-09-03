@@ -676,3 +676,60 @@ is sufficient.
 
 **Not verified.** 51 tests pass, typechecks, builds. No real card has been
 through it.
+
+---
+
+## Run 08, 2026-09-03 — identified, and the corner crop is why
+
+**Kangaskhan ex identified outright at 99%.** Second clean identification, and
+the first where the number was read confidently.
+
+Set against the scan immediately before it:
+
+| | Run 07 — failed | Run 08 — identified |
+|---|---|---|
+| Focus where the number is | **499** | **370** |
+| Digits in the image sent | 48px | **83px** |
+| Number read | nothing, 0% | `190/165` at **85%** |
+| Model's account | "too blurry, obstructed by the rule box" | "readable in the bottom-left magnified crop" |
+| Time | 5.1s | 3.9s |
+| Cost | $0.0056 | $0.0074 |
+
+**The failing scan was the sharper of the two.** 499 against 370, and it was the
+blurrier frame that read the number. So sharpness was not the deciding
+variable — magnification was. The corner crop is doing the work, and it can be
+credited on its own rather than confounded with anything else.
+
+That is worth stating plainly because it corrects the previous entry's caution.
+The note in run 07 said light had done more than magnification so far and this
+change should not be assumed to be the answer. On this evidence magnification
+was the answer, and the caution was misplaced.
+
+The model's account confirms the mechanism directly: *"Collector number 190/165
+is readable in the bottom-left magnified crop."* It read it from exactly the
+image built for it, and named which of the two corners it used.
+
+### The model's certainty about numbers looks usable again — when the input is
+
+`85%`, the first reading ever above the old 80% floor, and correct. The earlier
+pattern (45% correct, 65% and 75% wrong) came from scans where the digits were
+never legible in the first place; asked to rate a reading of pixels that did not
+contain a number, its answers were noise. Given a legible crop it appears to
+know the difference.
+
+**This does not change the gate.** Corroboration by the catalog is still the
+better evidence and costs nothing, and one observation is not grounds for
+reverting a decision made on three. Recorded because it may matter later.
+
+### Where the scanner now stands
+
+| | |
+|---|---|
+| Capture | 2160p, best of 6 frames, optional light |
+| Digits delivered to the model | 21px → 44px → **83px** |
+| Cost | $0.0074 a scan (**~$7.40 / 1,000**) |
+| Time | 3.9s |
+| Confidently wrong answers, all runs | **zero** |
+
+Still unmeasured: whether this holds across the other five cards, and whether
+the light is still needed now that magnification is doing the work.
