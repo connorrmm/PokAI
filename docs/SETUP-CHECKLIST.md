@@ -136,3 +136,44 @@ Neither key was ever written to this repository.
    Company, and displaying it in a paid product is a real question. So is
    redistributing market prices. Neither blocks building, both should be answered
    before charging money. Flagging, not solving — this needs a lawyer, not me.
+
+---
+
+## Collections — what Sterling must do (2026-09-04)
+
+Signing in and saving cards is built but **cannot work until two things are
+set**. Both are in Sterling's hands, not in the code.
+
+### 1. One new environment variable in Vercel
+
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Supabase dashboard → Project Settings → API → the key labelled **anon /
+public**. Add it in Vercel → Settings → Environment Variables for all three
+environments, then redeploy.
+
+**This key is public by design** — it ships in the browser and is meant to.
+Safety comes from row-level security, which is why those policies were tested
+three times. It is NOT the `service_role` key, which bypasses RLS entirely and
+must never appear in client code.
+
+`NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are already set.
+`/api/health` now lists all three and says what each is for.
+
+### 2. Allow the sign-in link to come back to the site
+
+Supabase dashboard → Authentication → URL Configuration:
+
+- **Site URL:** `https://pok-ai-drab.vercel.app`
+- **Redirect URLs:** add `https://pok-ai-drab.vercel.app/**`
+
+Without this Supabase refuses to send people back after they click the email
+link, and sign-in fails at the last step with an unhelpful error.
+
+### Worth knowing about the email
+
+Supabase's built-in email sender is **rate-limited to a handful of messages an
+hour** and is for testing only. Fine for the two of us; it will not survive
+real users. Before launch this needs a real sending service (Resend, Postmark
+or similar) configured under Authentication → Emails. That is a paid service at
+volume, so it is a decision for later, not a purchase to make now.

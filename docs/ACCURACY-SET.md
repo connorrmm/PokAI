@@ -1230,7 +1230,29 @@ failure has moved earlier and cleaner.
 | Camera | 1080p, black preview on iOS | 2160p, best of 6 frames, working |
 | Cost | — | ~$0.0076 a scan |
 
-### One loose end I cannot explain from the code
+### RESOLVED 2026-09-04 — Flareon does NOT identify outright, and should not
+
+Rescanned. The number was read `013/131` at 95% certainty, legibility "clear",
+and **the app offered a list**, with the four prints carrying that number at the
+top in price order: plain $0.28, Master Ball $29.66, Poké Ball $2.12, Cosmos
+Holo $1.32. Foil pattern came back `unknown`, so nothing reordered.
+
+**That is correct behaviour, and it means the table above is wrong.** Flareon
+was recorded as "identified" on a verbal report; it produced a list then too.
+The real result for the set is **four of five English cards identified outright,
+Flareon correctly offering four indistinguishable prints, and the Japanese card
+correctly finding no match.**
+
+The confidently-wrong fix holds: a number matching four candidates does not
+identify one, even at 100% scan confidence.
+
+Recording the correction rather than quietly amending the table, because a
+score that drifts upward on retelling is exactly how this file became wrong the
+first time.
+
+### The original loose end, kept for the reasoning
+
+
 
 **Flareon identifying outright should not be possible as I understand the
 logic.** Four prints carry `013/131` — plain $0.33, Master Ball $29.66, Poké
@@ -1255,3 +1277,17 @@ read".
 A pass on the accuracy set is a real milestone. It is not the same as
 understanding why every card passed, and this file has already recorded one
 confidently wrong answer that 60 passing tests did not catch.
+
+**The check was worth doing and the suspicion was misplaced.** The code was
+right; the report of it was not.
+
+### What the rescan asks for next
+
+The model said: *"Holo pattern cannot be assessed clearly from these angles."*
+Those four Flareons differ ONLY by foil pattern, and it is telling us it needs a
+better view of the foil to choose. That is a concrete, answerable request --
+tilt the card so the foil catches the light -- and it is the difference between
+a four-way choice and an identification on a 100x price spread.
+
+Second, showing 50 rows when 4 are real candidates is poor. The four matching
+the number should be separated from the 46 that do not.

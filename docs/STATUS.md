@@ -694,21 +694,22 @@ fixes achieved.
 
 ### What is NOT proven
 
-- **Why Flareon passed.** Four prints share `013/131`, so a correct number read
-  should match four candidates and produce a list, not an identification. Either
-  the search returned fewer candidates, or the foil-pattern signal is still
-  doing more than ranking — which would mean today's confidently-wrong fix is
-  incomplete and a $0.33 card can be named over an equally consistent $29.66
-  one. **Check this first next session**: scan Flareon, read "Cards found in
-  database" and "Foil pattern read".
+- ~~Why Flareon passed~~ — **resolved 2026-09-04. It does not.** Rescanned: the
+  number read `013/131` at 95%, and the app correctly offered the four prints
+  carrying it rather than naming one. The 5/5 figure came from a verbal report
+  and was wrong; the real result is **4 of 5 identified, Flareon correctly
+  offering four indistinguishable prints, Japanese card correctly declining.**
+  The confidently-wrong fix holds.
 - **The foil-pattern signal.** One observation, and it returned `unknown`.
 - **Sample size is seven cards.** A promising signal, not a measurement.
 - **Angle.** "At a steep angle" appeared twice. Nothing corrects for it.
 
 ### Next session, in order
 
-1. **Resolve the Flareon question above.** It is the one place a confidently
-   wrong answer could still be hiding.
+1. **Make a scan go somewhere.** `lib/supabase/` is empty: nothing in the app
+   has ever touched the database, so an identified card is forgotten the moment
+   it is shown. The schema and RLS have been built and tested since 2026-09-01
+   and are entirely unused. Sign-in, save to collection, collection view.
 2. Attack perspective, the untouched failure mode.
 3. Then judge the foil-pattern signal on real evidence.
 4. Port the remaining screens: portfolio, collection, scan history, tournaments.

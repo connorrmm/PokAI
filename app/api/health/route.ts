@@ -28,13 +28,19 @@ export async function GET() {
       name: 'NEXT_PUBLIC_SUPABASE_URL',
       set: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
       required: false,
-      used_for: 'Accounts and saved collections. Not wired up yet - nothing reads this.',
+      used_for: 'Sign-in and saved collections. Without it, scanning still works but nothing can be kept.',
+    },
+    {
+      name: 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+      set: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+      required: false,
+      used_for: 'Sign-in in the browser, and the token our API uses to act as that user so row-level security applies. Public by design - it is safe in client code, unlike the service role key.',
     },
     {
       name: 'SUPABASE_SERVICE_ROLE_KEY',
       set: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
       required: false,
-      used_for: 'Server-side database access. Not wired up yet - nothing reads this.',
+      used_for: 'Reading card names, art and prices for a collection. The catalog is server-only for licence compliance, so only the server may read it. NEVER put this in client code - it bypasses row-level security entirely.',
     },
   ];
 

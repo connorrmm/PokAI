@@ -43,7 +43,10 @@ export default function Home() {
         <SetupStatus />
         <Scanner />
       </div>
-      <p style={{ marginTop: 32, fontSize: 12, color: 'var(--muted)' }}>
+      <p style={{ marginTop: 24, fontSize: 13 }}>
+        <a href="/collection">My collection →</a>
+      </p>
+      <p style={{ marginTop: 24, fontSize: 12, color: 'var(--muted)' }}>
         <a href="/compare">Compare models on one photo</a> — measures accuracy, cost
         and speed across every option, on the same image.
       </p>

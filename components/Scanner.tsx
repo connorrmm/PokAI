@@ -4,6 +4,7 @@ import { identifyCard } from '@/lib/scanner/identify';
 import { identifyWithVision } from '@/lib/scanner/identify-vision';
 import type { CardRead } from '@/lib/scanner/vision-types';
 import { warmUpOcr } from '@/lib/scanner/ocr-client';
+import AddToCollection from './AddToCollection';
 import type { ApiCard, IdentifyResult, ScanDiagnostics } from '@/lib/scanner/types';
 import { frameScore, READABLE_SHARPNESS, GLARE_FRACTION } from '@/lib/scanner/sharpness';
 
@@ -607,6 +608,9 @@ export default function Scanner() {
 function ResultView({ outcome, photo, vision, onRetake }: {
   outcome: IdentifyResult; photo: string | null; vision: CardRead | null; onRetake: () => void;
 }) {
+  /** Which candidate the user tapped, so they can keep it without rescanning. */
+  const [picked, setPicked] = useState<ApiCard | null>(null);
+
   if (outcome.ok) {
     const c = outcome.apiCard;
     return (
@@ -615,6 +619,7 @@ function ResultView({ outcome, photo, vision, onRetake }: {
           Identified · {outcome.confidence}% confidence
         </div>
         <CardRow card={c} />
+        <AddToCollection card={c} />
         <button onClick={onRetake} className="btn-primary" style={{ ...btn, marginTop: 16 }}>Scan another</button>
         <Diagnostics d={outcome.diagnostics} vision={vision} />
       </div>
@@ -671,7 +676,25 @@ function ResultView({ outcome, photo, vision, onRetake }: {
 
       {candidates.length > 0 && (
         <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-          {candidates.map((c) => <CardRow key={String(c.id)} card={c} />)}
+          {candidates.map((c) => (
+            <button
+              key={String(c.id)}
+              onClick={() => setPicked(picked?.id === c.id ? null : c)}
+              aria-pressed={picked?.id === c.id}
+              style={{
+                display: 'block', width: '100%', padding: 0, marginBottom: 8,
+                background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer',
+                outline: picked?.id === c.id ? '2px solid var(--accent)' : 'none',
+                outlineOffset: 2, borderRadius: 14,
+              }}
+            >
+              <CardRow card={c} />
+            </button>
+          ))}
+          {/* The user picking the right print IS the answer the scanner could
+              not give. Making them rescan to keep it would throw away the one
+              decision only they can make. */}
+          {picked && <AddToCollection key={String(picked.id)} card={picked} />}
         </div>
       )}
 
