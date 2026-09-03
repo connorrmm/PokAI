@@ -55,6 +55,15 @@ export const CardReadSchema = z.object({
     .describe('How certain you are of the SET specifically, 0-100. Reading a clear set symbol or code deserves a high number; inferring the set from artwork style deserves a low one. 0 if unknown.'),
   rarity: z.string().nullable()
     .describe('Rarity if determinable, e.g. "Rare Holo", "Illustration Rare". Null if not.'),
+  holo_pattern: z.enum(['none', 'master_ball', 'poke_ball', 'cosmos', 'other', 'unknown'])
+    .describe(
+      'The shape of the holofoil pattern in the card BACKGROUND, which distinguishes prints ' +
+      'that are otherwise identical. "master_ball" = repeating Master Ball shapes (purple ball ' +
+      'with an M). "poke_ball" = repeating Poke Ball shapes. "cosmos" = a starfield or galaxy ' +
+      'sparkle. "none" = flat or ordinary holo with no repeating motif. "other" = a repeating ' +
+      'motif that is none of these. "unknown" if the foil is not visible enough to tell -- say ' +
+      'unknown rather than guessing, because these prints differ in price by 100x.',
+    ),
   hp: z.string().nullable().describe('Printed HP value, or null.'),
   legibility: z.enum(['clear', 'partial', 'poor'])
     .describe('How readable the card actually was in this image.'),

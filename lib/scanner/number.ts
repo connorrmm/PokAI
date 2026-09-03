@@ -85,3 +85,29 @@ export function setTotalMatchesCard(
   if (!cardTotal || cardTotal === 'NaN') return null;
   return cardTotal === extracted.total;
 }
+
+/** The holofoil patterns the catalog distinguishes, read from a card's name. */
+export type HoloPattern = 'none' | 'master_ball' | 'poke_ball' | 'cosmos' | 'other';
+
+/**
+ * Which holofoil print a catalog entry is, taken from its name.
+ *
+ * The catalog encodes this in the name itself -- "Flareon (Master Ball
+ * Pattern)", "Flareon - 013/131 (Cosmos Holo)" -- and it is the only thing
+ * separating four Prismatic Evolutions Flareons that all carry `013/131` and
+ * are worth $0.33, $29.66, $2.16 and $1.31.
+ *
+ * No collector number can tell those apart, so no amount of work on number
+ * reading will ever identify one. The foil pattern is a different signal
+ * entirely, and unlike a collector number it is large, high-contrast and
+ * spread across the whole card -- exactly the kind of thing that survives a
+ * bad photograph.
+ */
+export function holoPatternOfCard(name: string | null | undefined): HoloPattern {
+  const n = (name || '').toLowerCase();
+  if (n.includes('master ball')) return 'master_ball';
+  if (n.includes('poke ball') || n.includes('poké ball')) return 'poke_ball';
+  if (n.includes('cosmos')) return 'cosmos';
+  if (n.includes('pattern')) return 'other';
+  return 'none';
+}

@@ -195,6 +195,7 @@ export async function identifyWithVision(cardPhoto: string): Promise<VisionScan>
     autoAcceptFloor: d.autoAcceptFloor ?? null,
     uniquelyResolved: Boolean(d.uniquelyResolved),
     setTotalMatchCount: typeof d.setTotalMatchCount === 'number' ? d.setTotalMatchCount : null,
+    patternMatchCount: typeof d.patternMatchCount === 'number' ? d.patternMatchCount : null,
     numberDetail: crops ? {
       sourceWidth: crops.sourceWidth,
       sourceHeight: crops.sourceHeight,

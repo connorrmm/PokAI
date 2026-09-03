@@ -14,7 +14,9 @@ import {
   AUTO_ACCEPT_FLOOR, AUTO_ACCEPT_FLOOR_HIGH_VALUE,
 } from '../lib/scanner/confidence';
 import { rankCandidatesByName } from '../lib/scanner/rank';
-import { numberMatchesCard, extractCardNumber, setTotalMatchesCard } from '../lib/scanner/number';
+import {
+  numberMatchesCard, extractCardNumber, setTotalMatchesCard, holoPatternOfCard,
+} from '../lib/scanner/number';
 import { sharpnessScore, clippedFraction, frameScore } from '../lib/scanner/sharpness';
 import type { ApiCard, RankedCandidate } from '../lib/scanner/types';
 import {
@@ -583,5 +585,35 @@ describe('glare detection', () => {
     }
     const red = { width: w, height: h, data, colorSpace: 'srgb' } as ImageData;
     expect(clippedFraction(red)).toBe(0);
+  });
+});
+
+/**
+ * Four Prismatic Evolutions Flareons carry `013/131` -- plain, Master Ball,
+ * Poke Ball and Cosmos Holo -- worth $0.33, $29.66, $2.16 and $1.31. No
+ * collector number can separate them, so the foil pattern is the only signal
+ * that can.
+ */
+describe('holoPatternOfCard', () => {
+  it('reads the pattern out of the catalog name', () => {
+    expect(holoPatternOfCard('Flareon (Master Ball Pattern)')).toBe('master_ball');
+    expect(holoPatternOfCard('Flareon (Poke Ball Pattern)')).toBe('poke_ball');
+    expect(holoPatternOfCard('Flareon - 013/131 (Cosmos Holo)')).toBe('cosmos');
+  });
+
+  it('treats an unadorned name as an ordinary print', () => {
+    expect(holoPatternOfCard('Flareon')).toBe('none');
+    expect(holoPatternOfCard('Kangaskhan ex - 190/165')).toBe('none');
+  });
+
+  it('does not mistake an unrecognised pattern for a plain card', () => {
+    // A pattern we do not know about must not be ranked alongside plain
+    // prints, or the cheap card gets offered for the expensive one.
+    expect(holoPatternOfCard('Flareon (Cracked Ice Pattern)')).toBe('other');
+  });
+
+  it('handles a missing name without throwing', () => {
+    expect(holoPatternOfCard(null)).toBe('none');
+    expect(holoPatternOfCard(undefined)).toBe('none');
   });
 });

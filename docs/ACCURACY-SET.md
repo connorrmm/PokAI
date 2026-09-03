@@ -836,3 +836,64 @@ read off real scans rather than assumed.
 **Not verified.** 56 tests pass, typechecks, builds. Whether a phone torch
 actually beats a ceiling light reflection on foil is a question for a phone
 under a ceiling light.
+
+---
+
+## Run 09, 2026-09-03 — Flareon, and a third failure mode
+
+| | |
+|---|---|
+| Number read | `012/102` — wrong (truth `013/131`) |
+| **Glare** | **0% blown out** |
+| Focus | 176 (readable) |
+| Digits sent | 83px |
+| Model's account | "extremely blurred and **at a steep angle**" |
+| Correct card's rank | **1st of 50** |
+| Confidence | 59% — correctly refused |
+
+Neither glare nor size this time. **Perspective.** The card was photographed at
+an angle, so the digits are skewed and foreshortened, and no amount of
+magnification straightens them. Three distinct failure modes are now on record —
+too small, glare, and angle — and they have three different fixes.
+
+The never-guess rule held again: a wrong number matched no candidate, confidence
+fell to 59%, and the correct card was offered at the top of the list. **Zero
+confidently wrong answers still stands across every run of the session.**
+
+### Flareon can never be identified by its number, however well it is read
+
+Four Prismatic Evolutions Flareons carry `013/131`:
+
+| Print | Price |
+|---|---|
+| Flareon | $0.33 |
+| Flareon (Master Ball Pattern) | **$29.66** |
+| Flareon (Poke Ball Pattern) | $2.16 |
+| Flareon - 013/131 (Cosmos Holo) | $1.31 |
+
+A perfect read of `013/131` narrows fifty cards to these four and then stops.
+**The number is exhausted as a signal**, and the difference between the cheapest
+and the dearest is 90x. Any further work on number reading has no effect on this
+card, which is a large class: every modern set ships pattern variants.
+
+### Shipped: read the foil pattern
+
+The model is now asked what the holofoil background actually looks like —
+repeating Master Balls, repeating Poké Balls, a cosmos starfield, a plain holo,
+or unknown — and candidates matching it are ranked first. The catalog already
+encodes the answer in its own names ("Flareon (Master Ball Pattern)"), so no new
+data source is needed.
+
+Unlike a collector number, a foil pattern is **large, high-contrast and spread
+across the whole card**. It is exactly the kind of signal that survives the bad
+photograph that destroys a collector number, which is what makes it worth having
+rather than merely additional.
+
+**Ranking only, deliberately.** Pattern detection has never been measured
+against a real card, and the spread across those four prints is 90x. Ranking a
+wrong guess first costs a tap; identifying on one costs a collector real money.
+The enum includes `unknown` and the model is told to use it rather than guess.
+It can be promoted to an identifying signal when there is evidence it deserves
+to be — the same sequence the number signal went through.
+
+**Not verified.** 60 tests pass, typechecks, builds.

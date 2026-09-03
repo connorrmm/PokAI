@@ -671,6 +671,11 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
       (d.numberDetail.digitPx < 25 ? ' — too little detail to read' : ''),
     ]] as Array<[string, string]>) : []),
     ['Cards found in database', String(d.candidatesFound)],
+    ...(vision && vision.holo_pattern && vision.holo_pattern !== 'unknown' ? ([[
+      'Foil pattern read',
+      vision.holo_pattern.replace(/_/g, ' ') +
+      (d.patternMatchCount ? ` — ${d.patternMatchCount} candidate${d.patternMatchCount === 1 ? '' : 's'} match` : ''),
+    ]] as Array<[string, string]>) : []),
     ...(d.setTotalMatchCount ? ([[
       'Ranked first by set size',
       `${d.setTotalMatchCount} card${d.setTotalMatchCount === 1 ? '' : 's'} from a set that size`,

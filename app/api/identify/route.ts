@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { readCardFromImage } from '@/lib/vision';
 import { searchCards, TcgApiError } from '@/lib/tcgapi';
 import { rankCandidatesByName } from '@/lib/scanner/rank';
-import { numberMatchesCard, extractCardNumber, setTotalMatchesCard } from '@/lib/scanner/number';
+import {
+  numberMatchesCard, extractCardNumber, setTotalMatchesCard, holoPatternOfCard,
+} from '@/lib/scanner/number';
 import { computeConfidence, autoAcceptFloorFor, isClearlyBest } from '@/lib/scanner/confidence';
 import { decide } from '@/lib/scanner/decide';
 import { rateLimit, clientKey } from '@/lib/rate-limit';
@@ -144,6 +146,29 @@ export async function POST(req: Request) {
       }
     }
 
+    // The holofoil pattern separates prints that share a number.
+    //
+    // Four Prismatic Evolutions Flareons all carry `013/131` -- plain, Master
+    // Ball, Poke Ball and Cosmos Holo -- worth $0.33, $29.66, $2.16 and $1.31.
+    // No collector number can ever tell them apart, so this is the only signal
+    // that can. Unlike a number it is large, high-contrast and spread across
+    // the whole card, which is exactly what survives a bad photograph.
+    //
+    // RANKING ONLY, and deliberately so. Pattern detection has never been
+    // measured against a real card, and the gap between the cheapest and
+    // dearest of those four is 90x. Ranking a wrong guess first costs a tap;
+    // identifying on one costs a collector real money. It can be promoted to
+    // an identifying signal once there is evidence it deserves to be.
+    let patternMatches: RankedCandidate[] = [];
+    if (read.holo_pattern && read.holo_pattern !== 'unknown') {
+      const want = read.holo_pattern;
+      const byPattern = ranked.filter((r) => holoPatternOfCard(r.apiCard.name) === want);
+      if (byPattern.length > 0 && byPattern.length < ranked.length) {
+        patternMatches = byPattern;
+        ranked = [...byPattern, ...ranked.filter((r) => !byPattern.includes(r))];
+      }
+    }
+
     // Set name, when legible, breaks remaining ties.
     if (read.set_name) {
       const want = read.set_name.toLowerCase();
@@ -239,6 +264,8 @@ export async function POST(req: Request) {
         numberMatchCount: numberMatches.length,
         setMatchCount: setMatches.length,
         setTotalMatchCount: setTotalMatches.length,
+        patternMatchCount: patternMatches.length,
+        holoPattern: read.holo_pattern,
         queriesTried: queries,
         candidatesFound: cards.length,
       },

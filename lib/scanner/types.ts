@@ -65,6 +65,11 @@ export interface ScanDiagnostics {
    * when the full number matched none. These are ranked first.
    */
   setTotalMatchCount?: number | null;
+  /**
+   * How many candidates share the holofoil pattern read from the photo. These
+   * are ranked first. Ranking only -- see the note in the identify route.
+   */
+  patternMatchCount?: number | null;
   /** Did the number and set together identify exactly one print? */
   uniquelyResolved?: boolean;
   /**
