@@ -14,14 +14,21 @@ nothing.
 
 ## Set 01 — recorded 2026-09-02
 
-Read from the reference photo. Entries marked *uncertain* were not fully legible
-and should be corrected by whoever owns the cards.
+Read from the reference photo, except where marked *verified from the card*,
+which means Sterling read it off the physical card. Entries marked *uncertain*
+were not fully legible and still need that treatment.
+
+**One entry here was already wrong.** Flareon was recorded as `017/131` from
+the photo; the card says `013/131`. An answer key read from a photograph is
+subject to the same misreads as the scanner it is grading, which makes it worse
+than useless — it grades a correct answer as wrong. Every number in this table
+should end up verified from the physical card.
 
 | # | Card | Number | Set | Why it is in the set |
 |---|---|---|---|---|
 | 1 | Mega Pyroar ex | 015/086 | Mega Evolution era | Full art, heavy foil, large HP |
 | 2 | Goldeen | 118/165 | SV: 151 | Plain common — the boring case that must not break |
-| 3 | Flareon | 017/131 | Prismatic Evolutions | Stage 1, ordinary rare |
+| 3 | Flareon | **013/131** *verified from the card* | Prismatic Evolutions | Stage 1, ordinary rare |
 | 4 | Dipplin | 010/131 *uncertain* | Prismatic Evolutions | Uncommon, busy artwork |
 | 5 | **Mega Greninja ex** | — | **JAPANESE** | The hard case. See below. |
 | 6 | Kangaskhan ex | 040/A063 *uncertain* | Mega Evolution | Unusual `A`-prefixed numbering |
@@ -310,3 +317,47 @@ is a decision rather than an oversight.
 
 $0.0057 a scan (4,726 in / 188 out), up from $0.0035 before the bottom strip.
 The rise is the strip plus the larger source photo. Still under a cent.
+
+---
+
+## Ground truth correction — 2026-09-03
+
+**Flareon is `013/131`, read off the physical card by Sterling.**
+
+Three things follow, and the middle one is the important one.
+
+**1. The catalog is right.** tcgapi.dev lists the Prismatic Evolutions Flareon
+as `013/131` and that is exactly what the card says. This was an open worry —
+if the catalog had been wrong, no amount of scanner work would have helped. It
+is not. Card data can be trusted.
+
+**2. This file was wrong.** The answer key said `017/131`, because I read it off
+a photograph. **An answer key read from a photo is subject to the same misreads
+as the scanner it grades.** Had this gone unnoticed, a scan that correctly
+returned `013/131` would have been recorded as a failure, and I would have spent
+real effort "fixing" a scanner that was right. Every remaining number in the set
+that was read from the photo is suspect for the same reason.
+
+**3. The set-total fix is validated.** The true card is `013/131`, so it is one
+of the four `/131` candidates the new ranking lifts to the top of a 50-card
+list. The model's `071/131` was wrong in the numerator and right in the total —
+precisely the case the fix was built for.
+
+The model's error is worth noting: `013` read as `071`. Not a single blurred
+glyph but a scrambling of the digits, with `041` offered as its alternative. It
+is reading digits that are present and putting them in the wrong order, which
+is a different failure from not seeing them, and it will not be fixed by more
+pixels.
+
+### Still needed from the physical cards
+
+| # | Card | Recorded | Status |
+|---|---|---|---|
+| 1 | Mega Pyroar ex | 015/086 | from photo — **needs checking** |
+| 3 | Flareon | 013/131 | ✅ verified from the card |
+| 4 | Dipplin | 010/131 | from photo, marked uncertain — **needs checking** |
+| 6 | Kangaskhan ex | 040/A063 | from photo, marked uncertain — **needs checking** |
+
+Mega Pyroar matters most: the model read `075/086` and this file says `015/086`.
+That is the same `1`/`7` confusion that just turned out to be MY error on
+Flareon, so it cannot be assumed the model is the one that is wrong.
