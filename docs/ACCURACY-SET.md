@@ -1190,3 +1190,68 @@ Three iOS-specific hardenings shipped alongside: `muted` set as a property
 rather than trusting React to reflect it (Safari refuses inline playback of
 anything it deems unmuted), `playsinline` forced as an attribute, and `autoPlay`
 so the element can start itself if a scripted `play()` is refused.
+
+---
+
+## Run 13, 2026-09-03 — the full set, and the first real pass
+
+**Five of five English cards identified outright. The Japanese card correctly
+found no match.**
+
+| # | Card | Result |
+|---|---|---|
+| 1 | Mega Pyroar ex `015/086` | identified |
+| 2 | Goldeen | identified |
+| 3 | Flareon `013/131` | identified |
+| 4 | Dipplin `010/131` | identified |
+| 5 | Mega Greninja ex (JAPANESE) | **no match — correct** |
+| 6 | Kangaskhan ex `190/165` | identified |
+
+Sterling: *"they all got the exact reading, it was not the list."*
+
+**Card 5 is the result worth dwelling on.** The catalog is TCGPlayer-sourced and
+English-only, so there was no correct answer for that card to find. The only
+outcomes available were "no match" and a confident match to an English print
+with similar artwork — which would carry a completely wrong valuation, since
+Japanese prints are priced independently. It declined. That is rule 1 working
+on the one card in the set designed to break it, and it is a better result than
+the five successes.
+
+For comparison, the same card in run 01 was misread as *"Kyogre-ex"* at 75%
+confidence. It still found nothing, so no harm was done either time, but the
+failure has moved earlier and cleaner.
+
+### The distance travelled today
+
+| | This morning | Now |
+|---|---|---|
+| Cards identified outright | 0 | **5 of 5** |
+| Digits reaching the model | 21px | 83px |
+| Camera | 1080p, black preview on iOS | 2160p, best of 6 frames, working |
+| Cost | — | ~$0.0076 a scan |
+
+### One loose end I cannot explain from the code
+
+**Flareon identifying outright should not be possible as I understand the
+logic.** Four prints carry `013/131` — plain $0.33, Master Ball $29.66, Poké
+Ball $2.16, Cosmos Holo $1.31 — so a correct number read matches four
+candidates, not one, and `resolveCandidates()` should refuse to identify and
+offer the group.
+
+Three explanations, and I do not know which:
+
+1. The search returned fewer candidates this time, leaving the number unique.
+2. The foil-pattern signal is doing more than ranking — **which is the bug
+   fixed today**, and would mean the fix is incomplete.
+3. It identified through `isClearlyBest` on a name-score gap I have not
+   accounted for.
+
+Explanation 2 is the one that matters: it would mean a $0.33 card can still be
+named when a $29.66 one is equally consistent with the evidence. **Not treated
+as settled.** The next session should scan Flareon once and read its
+diagnostics panel — specifically "Cards found in database" and "Foil pattern
+read".
+
+A pass on the accuracy set is a real milestone. It is not the same as
+understanding why every card passed, and this file has already recorded one
+confidently wrong answer that 60 passing tests did not catch.

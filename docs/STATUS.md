@@ -681,21 +681,34 @@ enforces the rule: **weak signals rank, strong signals identify, ranking runs
 first and identifying last**, plus an invariant that withdraws the claim if the
 card at the front is not one the evidence points at. 66 tests.
 
+### Later the same evening: the set passed
+
+After the iOS camera fix, all six cards were rescanned. **Five of five English
+cards identified outright**, and the Japanese Mega Greninja correctly found no
+match rather than guessing at an English print — the best available outcome on
+the one card built to break the never-guess rule.
+
+That supersedes the "plain rares do not work" finding below: Flareon and Dipplin
+both identified. The black camera preview had been masking how much the earlier
+fixes achieved.
+
 ### What is NOT proven
 
-- **Plain rares.** Flareon failed every attempt. Its number is small and
-  low-contrast over busy artwork, and four prints share `013/131`.
-  `docs/PRODUCT.md` says ordinary cards are the bulk of a real collection, so
-  **this is the honest measure of the product** and it is not passing.
+- **Why Flareon passed.** Four prints share `013/131`, so a correct number read
+  should match four candidates and produce a list, not an identification. Either
+  the search returned fewer candidates, or the foil-pattern signal is still
+  doing more than ranking — which would mean today's confidently-wrong fix is
+  incomplete and a $0.33 card can be named over an equally consistent $29.66
+  one. **Check this first next session**: scan Flareon, read "Cards found in
+  database" and "Foil pattern read".
 - **The foil-pattern signal.** One observation, and it returned `unknown`.
 - **Sample size is seven cards.** A promising signal, not a measurement.
 - **Angle.** "At a steep angle" appeared twice. Nothing corrects for it.
 
 ### Next session, in order
 
-1. Re-run the six cards fresh, in good light, card filling the frame. Focus
-   scores fell 499 → 370 → 176 → 135 across the night; the later data is a
-   tired tester, not the app.
+1. **Resolve the Flareon question above.** It is the one place a confidently
+   wrong answer could still be hiding.
 2. Attack perspective, the untouched failure mode.
 3. Then judge the foil-pattern signal on real evidence.
 4. Port the remaining screens: portfolio, collection, scan history, tournaments.
