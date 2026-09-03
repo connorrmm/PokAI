@@ -52,10 +52,46 @@ export default function Scanner() {
   async function startCamera() {
     setError(null);
     try {
+      // Ask for as much resolution as the phone will give.
+      //
+      // This is the single most important line in the scanner, and it was
+      // wrong. It used to ask for 1080p. A collector number is about 2% of a
+      // card's height, and a card fills maybe half the frame, so at 1080p the
+      // digits are captured about 20 pixels tall -- right at the edge of
+      // legible. Run 02 measured exactly that: the model read the number on
+      // one card in five and called the rest "too blurry". It was not blur.
+      // The detail was never captured.
+      //
+      // At 2160p those digits are ~40px and comfortably readable. It costs
+      // nothing per scan, because the upload is downscaled either way; the
+      // extra pixels are used for the magnified bottom crop and then thrown
+      // away. `ideal` rather than `exact` so a phone that cannot do it simply
+      // gives its best instead of failing to open the camera at all.
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+        },
       });
       streamRef.current = stream;
+
+      // Keep the lens hunting for focus rather than locking on whatever was in
+      // front of it when the camera opened. Non-standard and absent on
+      // desktop, so it is attempted and ignored if unsupported -- never let it
+      // stop a scan.
+      try {
+        const track = stream.getVideoTracks()[0];
+        const caps = track?.getCapabilities?.() as
+          (MediaTrackCapabilities & { focusMode?: string[] }) | undefined;
+        if (caps?.focusMode?.includes('continuous')) {
+          await track.applyConstraints(
+            { advanced: [{ focusMode: 'continuous' }] } as unknown as MediaTrackConstraints,
+          );
+        }
+      } catch (e) {
+        console.warn('Continuous focus unavailable:', e);
+      }
       setPhase('camera');
       // Wait for React to render the <video> before attaching.
       requestAnimationFrame(() => {
@@ -399,6 +435,15 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
     ['Name read from the card', d.ocrText ? `"${d.ocrText}"` : '(nothing readable)'],
     ...(vision ? [] : ([['Which crop worked', d.ocrStrategy ?? '(none succeeded)']] as Array<[string, string]>)),
     ['Card number read', d.numberText ? `"${d.numberText.replace(/\s+/g, ' ').trim()}"` : '(not read)'],
+    ...(d.numberDetail ? ([[
+      'Detail where the number is',
+      `${d.numberDetail.digitPx}px tall digits ` +
+      `(photo ${d.numberDetail.sourceWidth}x${d.numberDetail.sourceHeight})` +
+      // Below roughly 25px there is nothing to read, however good the model.
+      // Saying so turns "the model failed" into "the camera did", which is a
+      // different problem with a different fix.
+      (d.numberDetail.digitPx < 25 ? ' — too little detail to read' : ''),
+    ]] as Array<[string, string]>) : []),
     ['Cards found in database', String(d.candidatesFound)],
     ['Best match', d.topName ?? '(none)'],
     ['Confidence in this scan', d.topScore != null ? `${d.topScore}%` : '—'],

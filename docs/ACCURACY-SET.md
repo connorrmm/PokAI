@@ -161,3 +161,73 @@ run 02, revert it rather than pay for nothing.
 never-guess tests pass, but the only test that counts is rescanning these same
 six cards. Run 02 measures: number certainty per card, candidates per card, and
 cost per scan.
+
+---
+
+## Results — run 02, 2026-09-02, with the bottom strip
+
+| # | Card | Number certainty | Number read | Candidates | Change from run 01 |
+|---|---|---|---|---|---|
+| 1 | Dipplin | 0% | — | 10 | none |
+| 2 | Goldeen | 0% | — | 26 | none |
+| 3 | Kangaskhan ex | 0% | — | 22 | none |
+| 4 | Mega Pyroar ex | **65%** | `075/086` (**wrong**) | 2 | number read for the first time |
+| 6 | Flareon | 0% | — | 50 | none |
+
+Cost rose from $0.0035 to ~$0.0047 a scan, as predicted.
+
+**The strip is reaching the model.** Every scan now comments on it specifically
+— *"the bottom magnified crop is too blurry"*, *"the second image is severely
+out of focus and overexposed"*. That is a different failure from run 01, where
+the model never mentioned a crop at all.
+
+**One card in five improved, and its number was wrong.** Mega Pyroar read
+`075/086`; the real card is `015/086`. The never-guess rule handled this
+correctly — confidence fell from 94% to 59% because the number matched no
+candidate, and both prints were still offered rather than one wrong one. A
+misread number is caught, not trusted. But it is not an identification.
+
+### The real cause, found by arithmetic rather than by looking
+
+Every scan in run 02 reported **3,929 input tokens — identical to the digit.**
+Identical token counts mean identical image dimensions, which means every photo
+came from the camera path at a fixed capture size. That single number is what
+made the cause findable.
+
+The camera was requesting **1080p**. Work it through:
+
+| | |
+|---|---|
+| Capture height | 1080px |
+| Card fills roughly half the frame | ~1050px of card |
+| Collector number is ~2% of a card's height | **~21px of digits** |
+| After the strip's 2x magnification | ~42px of *interpolated* digits |
+
+**21 pixels is not blur. It is an absence of pixels.** No model reads a
+collector number that was never captured, and magnifying it afterwards enlarges
+the mush without adding information. Mega Pyroar succeeding once is what you
+would expect right at the edge of legibility — sometimes the coin lands heads.
+
+This was my error twice over: first the 1400px downscale, then diagnosing the
+result as focus when the source was the constraint all along.
+
+### The fix, shipped 2026-09-02 — capture at 2160p
+
+The camera now asks for 3840x2160 instead of 1920x1080, and enables continuous
+autofocus where the device supports it. Those same digits are captured about
+**40px tall instead of 21px**.
+
+It costs nothing per scan. The uploaded card image is downscaled to 1400px
+either way; the extra pixels are spent on the magnified bottom crop and then
+discarded. `ideal` rather than `exact`, so a phone that cannot manage 4K gives
+its best rather than failing to open the camera.
+
+**A new diagnostic row makes this measurable instead of arguable.** Every scan
+now reports the estimated pixel height of the collector number in the crop it
+sent, and flags anything under 25px as too little detail to read. Run 03 should
+show that figure roughly doubling. If it does not, the phone refused the
+resolution request and the answer is to photograph cards with the native camera
+app and upload them, which captures at full sensor resolution.
+
+**Not verified.** Typechecks, builds, 36 tests pass. Whether a phone honours a
+4K request can only be found out on a phone.

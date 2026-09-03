@@ -72,7 +72,25 @@ function estimateCost(model: string | undefined, inTok: number, outTok: number):
  * Haiku, taking a scan from ~$0.0035 to ~$0.005. Worth it if it turns a
  * fifty-card list into one card.
  */
-export function cropBottomStrip(dataUrl: string, fraction = 0.32, maxWidth = 1568): Promise<string | null> {
+export interface BottomStrip {
+  dataUrl: string;
+  /** Dimensions of the photo the strip was cut from. */
+  sourceWidth: number;
+  sourceHeight: number;
+  /**
+   * Roughly how many pixels tall the collector number's digits are in the
+   * strip we send. A collector number is about 2% of a card's height, so this
+   * is (source height x 0.02 x scale).
+   *
+   * This is the number that decides whether a scan can identify a print at
+   * all, and it is worth staring at. Run 02 measured ~20px and the model
+   * called the crop "too blurry to read" on four cards out of five. It is not
+   * blur -- there was never any detail there to begin with.
+   */
+  digitPx: number;
+}
+
+export function cropBottomStrip(dataUrl: string, fraction = 0.32, maxWidth = 1568): Promise<BottomStrip | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -93,7 +111,12 @@ export function cropBottomStrip(dataUrl: string, fraction = 0.32, maxWidth = 156
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, sy, img.width, sh, 0, 0, c.width, c.height);
-      resolve(c.toDataURL('image/jpeg', 0.92));
+      resolve({
+        dataUrl: c.toDataURL('image/jpeg', 0.92),
+        sourceWidth: img.width,
+        sourceHeight: img.height,
+        digitPx: Math.round(img.height * 0.02 * scale),
+      });
     };
     img.onerror = () => resolve(null);
     img.src = dataUrl;
@@ -112,7 +135,7 @@ export async function identifyWithVision(cardPhoto: string): Promise<VisionScan>
   const res = await fetch('/api/identify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image: small, bottomStrip: strip, mediaType: 'image/jpeg' }),
+    body: JSON.stringify({ image: small, bottomStrip: strip?.dataUrl ?? null, mediaType: 'image/jpeg' }),
   });
 
   const json = await res.json().catch(() => null);
@@ -138,6 +161,11 @@ export async function identifyWithVision(cardPhoto: string): Promise<VisionScan>
       : (outcome?.candidates?.[0] as ApiCard | undefined)?.name ?? null,
     autoAcceptFloor: d.autoAcceptFloor ?? null,
     uniquelyResolved: Boolean(d.uniquelyResolved),
+    numberDetail: strip ? {
+      sourceWidth: strip.sourceWidth,
+      sourceHeight: strip.sourceHeight,
+      digitPx: strip.digitPx,
+    } : null,
     usage: u ? {
       inputTokens: u.inputTokens, outputTokens: u.outputTokens,
       model: d.model ?? 'unknown', costUsd: estimateCost(d.model, u.inputTokens, u.outputTokens),

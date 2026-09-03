@@ -62,6 +62,16 @@ export interface ScanDiagnostics {
   usage?: { inputTokens: number; outputTokens: number; model: string; costUsd: number } | null;
   /** Did the number and set together identify exactly one print? */
   uniquelyResolved?: boolean;
+  /**
+   * How much detail the photo actually contained where the collector number
+   * is printed. `digitPx` is the estimated pixel height of those digits in the
+   * crop we sent.
+   *
+   * Diagnostic, not decorative. Run 02 showed the model calling the crop
+   * "blurry" on four cards out of five; this says whether that is blur or
+   * simply an absence of pixels, which have completely different fixes.
+   */
+  numberDetail?: { sourceWidth: number; sourceHeight: number; digitPx: number } | null;
 }
 
 export type IdentifyOutcome =
