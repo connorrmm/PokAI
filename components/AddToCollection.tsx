@@ -10,10 +10,31 @@
  */
 import { useState } from 'react';
 import type { ApiCard } from '@/lib/scanner/types';
+import type { CardRead } from '@/lib/scanner/vision-types';
+import { logScan } from '@/lib/scan-log';
 import { useSession } from './Auth';
 import Auth from './Auth';
 
-export default function AddToCollection({ card }: { card: ApiCard }) {
+export default function AddToCollection({
+  card, predicted, read, confidence, candidateCount, autoAccepted = false,
+}: {
+  card: ApiCard;
+  /** What the scanner led with. Differs from `card` when the user overruled it. */
+  predicted?: ApiCard | null;
+  read?: CardRead | null;
+  confidence?: number | null;
+  candidateCount?: number | null;
+  /**
+   * Did the SCANNER name this card, or did the user pick it?
+   *
+   * Passed explicitly rather than inferred by comparing ids. Inferring it
+   * meant that tapping the FIRST row of a never-guess candidate list recorded
+   * `auto_accepted = true` -- so the app would have counted its own unanswered
+   * questions as successful identifications, inflating the exact accuracy
+   * signal this feature exists to measure.
+   */
+  autoAccepted?: boolean;
+}) {
   const { session, ready } = useSession();
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +66,18 @@ export default function AddToCollection({ card }: { card: ApiCard }) {
         return;
       }
       setState('saved');
+
+      // The card is safely saved, so history and the correction can be
+      // recorded now without any risk of a bookkeeping failure costing the
+      // user the thing they actually wanted.
+      void logScan(session, {
+        read: read ?? null,
+        confidence: confidence ?? null,
+        autoAccepted,
+        candidateCount: candidateCount ?? null,
+        card,
+        predicted: predicted ?? null,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setState('idle');

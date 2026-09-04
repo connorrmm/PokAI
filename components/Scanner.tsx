@@ -742,7 +742,10 @@ function ResultView({ outcome, photo, vision, onRetake }: {
           Identified · {outcome.confidence}% confidence
         </div>
         <CardRow card={c} />
-        <AddToCollection card={c} />
+        <AddToCollection
+          card={c} predicted={c} read={vision} autoAccepted
+          confidence={outcome.confidence} candidateCount={1}
+        />
         <button onClick={onRetake} className="btn-primary" style={{ ...btn, marginTop: 16 }}>Scan another</button>
         <Diagnostics d={outcome.diagnostics} vision={vision} />
       </div>
@@ -817,7 +820,18 @@ function ResultView({ outcome, photo, vision, onRetake }: {
           {/* The user picking the right print IS the answer the scanner could
               not give. Making them rescan to keep it would throw away the one
               decision only they can make. */}
-          {picked && <AddToCollection key={String(picked.id)} card={picked} />}
+          {picked && (
+            <AddToCollection
+              key={String(picked.id)}
+              card={picked}
+              // The scanner's own lead. If the user tapped a different row,
+              // that difference IS the correction worth recording.
+              predicted={candidates[0] ?? null}
+              read={vision}
+              confidence={'confidence' in outcome ? outcome.confidence : null}
+              candidateCount={candidates.length}
+            />
+          )}
         </div>
       )}
 

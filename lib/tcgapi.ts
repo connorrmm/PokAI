@@ -11,6 +11,7 @@
  */
 import 'server-only';
 import type { ApiCard } from './scanner/types';
+import { cacheCards } from './catalog';
 import { normaliseCard, type TcgApiCard } from './tcgapi-normalise';
 
 export { normaliseCard };
@@ -84,5 +85,14 @@ export async function searchCards(query: string, limit = 40): Promise<ApiCard[]>
     `&limit=${Math.min(Math.max(limit, 1), 100)}`;
   const res = await fetchWithRetry(url);
   const json = (await res.json()) as { data?: TcgApiCard[] };
-  return Array.isArray(json.data) ? json.data.map(normaliseCard) : [];
+  const cards = Array.isArray(json.data) ? json.data.map(normaliseCard) : [];
+
+  // Fill our own catalog as we go. Every card lookup in the app funnels
+  // through here, so doing it at this single point means no future code path
+  // can forget to -- and the rows written are the provider's answer to OUR
+  // server, never anything a browser supplied. See lib/catalog.ts for why the
+  // cache being empty broke saving a card entirely.
+  await cacheCards(cards);
+
+  return cards;
 }

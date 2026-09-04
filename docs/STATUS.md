@@ -724,3 +724,57 @@ Full run-by-run detail, including every measurement quoted here, is in
    There is no fourth category, and "the code looks right" is not verification.
 3. Never delete a caveat to make the picture look better. That is how this file
    became wrong the first time.
+
+## 14. The catalog was never filled — found 2026-09-04
+
+**Saving a card had never worked once.** `collections` had zero rows.
+
+`cards` was empty, and `collections.card_id`, `scans.chosen_card_id` and both
+`corrections` card columns carry foreign keys to it. Every "Add to my
+collection" failed with `foreign_key_violation`. Proven against the live
+database rather than reasoned about:
+
+| | |
+|---|---|
+| save with an empty catalog | **BUG REPRODUCED: foreign_key_violation** |
+| save after caching the card | SUCCEEDS |
+| scan history insert | SUCCEEDS |
+| price reaching `card_prices_latest` | 12.34 |
+
+`card_prices` was empty too, so even had saving worked, every card would have
+read "Value unavailable" forever and the portfolio total would have been $0
+regardless of what anyone owned.
+
+CLAUDE.md settled this on 2026-08-31: *"Card data is cached in our own database
+and refreshed on a schedule."* The cache was designed, the migrations were
+written, the RLS was tested — and nothing ever wrote a row into it.
+
+**Fix:** `lib/catalog.ts`, called from inside `searchCards()`. Every card
+lookup in the app funnels through that one function, so the catalog now fills
+itself as people scan. Placed there rather than at the point of saving for two
+reasons: no future code path can forget it, and it never trusts the browser —
+the rows written are the provider's answer to our server, not whatever a client
+posted.
+
+The licence permits precisely this (*"storage is fine, redistribution is
+not"*), and migration 0004 already revoked catalog access from `anon` and
+`authenticated`, so these rows cannot be served onward.
+
+### How it was missed
+
+Sign-in worked, the page rendered, the API returned real errors, 66 tests
+passed, and the build was clean. **Nothing exercised the write path against a
+real database.** The same shape as every other defect in this file: the pieces
+were right and the seam between them was never tried.
+
+Also fixed in the same pass:
+
+- **`auto_accepted` was inferred by comparing card ids**, so tapping the first
+  row of a never-guess candidate list recorded as "identified outright". The
+  app would have counted its own unanswered questions as successes, inflating
+  the very accuracy signal the feature exists to measure. Now passed
+  explicitly from the outcome.
+- **A non-OK response from the scan log was discarded without a warning**, so a
+  100% failure rate was invisible in the browser console.
+- **The history page had no loading state**, showing a bare header while
+  fetching and permanently if a response arrived without `items`.
