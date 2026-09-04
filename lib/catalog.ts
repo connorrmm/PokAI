@@ -74,15 +74,44 @@ export async function cacheCards(cards: ApiCard[]): Promise<void> {
       .map((c) => ({
         card_id: Number(c.id),
         printing: c.printing || 'Normal',
-        market_price: c.marketPrice,
+        market_price: c.marketPrice as number,
         source: 'tcgapi.dev',
         // The provider's own timestamp: when the price was TRUE, not when we
         // fetched it. docs/PRODUCT.md rule 10, market transparency.
         source_updated_at: c.priceUpdatedAt ?? null,
       }));
+
     if (priced.length) {
-      const { error: pErr } = await sb.from('card_prices').insert(priced);
-      if (pErr) console.warn('Could not cache prices:', pErr.message);
+      // Only write an observation that differs from the one already held.
+      //
+      // A single Flareon scan searches and returns fifty cards, so appending
+      // unconditionally wrote fifty price rows per scan, nearly all identical
+      // to the last. That is not a time series, it is the same measurement
+      // recorded over and over -- and it makes `card_prices_latest`'s
+      // DISTINCT ON sort through ever more duplicates to find the same answer.
+      const { data: known } = await sb
+        .from('card_prices_latest')
+        .select('card_id, printing, market_price, source_updated_at')
+        .in('card_id', priced.map((p) => p.card_id));
+
+      const seen = new Map<string, { price: number | null; at: string | null }>();
+      for (const k of known ?? []) {
+        seen.set(`${k.card_id}|${k.printing}`, {
+          price: k.market_price === null ? null : Number(k.market_price),
+          at: k.source_updated_at ?? null,
+        });
+      }
+
+      const fresh = priced.filter((p) => {
+        const prev = seen.get(`${p.card_id}|${p.printing}`);
+        if (!prev) return true;
+        return prev.price !== p.market_price || prev.at !== p.source_updated_at;
+      });
+
+      if (fresh.length) {
+        const { error: pErr } = await sb.from('card_prices').insert(fresh);
+        if (pErr) console.warn('Could not cache prices:', pErr.message);
+      }
     }
   } catch (e) {
     console.warn('Could not cache cards:', e);

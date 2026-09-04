@@ -10,6 +10,7 @@ interface Holding {
 interface Data {
   totals: { cards: number; valued: number; unpriced: number; marketValue: number };
   change: { since: string; absolute: number; percent: number | null } | null;
+  valuationUnavailable: boolean;
   series: Point[];
   top: Holding[];
   itemCount: number;
@@ -18,8 +19,19 @@ interface Data {
 function money(n: number): string {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+/**
+ * Days between two calendar days, both read in UTC.
+ *
+ * Comparing `Date.now()` against a UTC midnight mixed two clocks: any load
+ * after about midday UTC rounded up, so yesterday's snapshot was labelled
+ * "2 days ago". Snapshots are keyed by UTC date, so the comparison has to be
+ * as well.
+ */
 function sinceLabel(iso: string): string {
-  const days = Math.round((Date.now() - new Date(`${iso}T00:00:00Z`).getTime()) / 86_400_000);
+  const then = new Date(`${iso}T00:00:00Z`).getTime();
+  const now = new Date();
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const days = Math.floor((todayUtc - then) / 86_400_000);
   if (days <= 0) return 'today';
   if (days === 1) return 'since yesterday';
   return `since ${days} days ago`;
@@ -88,7 +100,13 @@ export default function Portfolio() {
         {/* Direction is carried by the ARROW AND THE WORDS. Colour only
             reinforces it -- mint against coral is the red/green pair a
             colour-blind reader cannot separate. */}
-        {data.change ? (
+        {data.valuationUnavailable ? (
+          // Rule 2: an unpriced total is not a valuation. Never dress one up
+          // as a real figure, and never compute a change from it.
+          <div style={{ fontSize: 12, marginTop: 4, color: 'var(--gold)' }}>
+            No prices available right now, so this total is not a valuation.
+          </div>
+        ) : data.change ? (
           <div className="mono" style={{
             fontSize: 12, marginTop: 4, fontWeight: 600,
             color: rising ? 'var(--mint)' : 'var(--accent-warm)',

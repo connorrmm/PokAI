@@ -54,10 +54,17 @@ export async function loadCollection(
   const live = new Map<number, { imageUrl: string | null; rarity: string | null; marketPrice: number | null }>();
 
   if (ids.length && sb) {
-    const [{ data: cardRows }, { data: priceRows }] = await Promise.all([
+    const [cardRes, priceRes] = await Promise.all([
       sb.from('cards').select('id, image_url, rarity').in('id', ids),
       sb.from('card_prices_latest').select('card_id, market_price').in('card_id', ids),
     ]);
+    // Discarding these turned a broken service-role read into "Value
+    // unavailable" on every card and a $0.00 portfolio, served with a 200 and
+    // nothing logged anywhere. Rule 4: a failure must say what it was.
+    if (cardRes.error) console.warn('Catalog read failed:', cardRes.error.message);
+    if (priceRes.error) console.warn('Price read failed:', priceRes.error.message);
+    const cardRows = cardRes.data;
+    const priceRows = priceRes.data;
     const priceOf = new Map<number, number | null>();
     for (const p of priceRows ?? []) {
       if (!priceOf.has(p.card_id)) priceOf.set(p.card_id, p.market_price);

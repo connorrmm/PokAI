@@ -778,3 +778,43 @@ Also fixed in the same pass:
   100% failure rate was invisible in the browser console.
 - **The history page had no loading state**, showing a bare header while
   fetching and permanently if a response arrived without `items`.
+
+### Eight more defects, found by reviewing code that shipped unreviewed
+
+The auth, collection and portfolio work went in without a review pass. It had
+eight defects, four of them user-visible. Fixed 2026-09-04.
+
+**A fabricated crash, in the code whose comment claimed to prevent one.** The
+portfolio skipped writing a snapshot when no price could be found — but still
+compared today's $0.00 against a real earlier baseline, so a run where prices
+failed to load would have displayed *"▼ down $480.00 (100%)"*. Product rule 2,
+broken by the exact code written to uphold it: skipping the write was not
+enough, the comparison had to be skipped too. The page now says plainly that no
+prices are available and that the total is not a valuation.
+
+**The save button could never appear.** If `getSession()` rejected — a lock
+timeout, storage blocked in private browsing — `ready` stayed false forever,
+`AddToCollection` rendered `null`, and there was nothing on screen to say why.
+
+**Adding a card was a read-modify-write**, so two quick taps raced and lost an
+increment. Migration 0007 adds a unique index and an atomic function. Verified
+on the live database: two saves collapse to one row at quantity 2, the same
+card in a different condition stays a separate holding (MVP item 9), and
+another signed-in user sees zero rows. Test data removed.
+
+**Fifty price rows per scan.** A Flareon search returns fifty cards, and each
+was appended to `card_prices` unconditionally — the same measurement recorded
+over and over, making `card_prices_latest` sort through ever more duplicates
+for the same answer. Now only an observation that differs from the one already
+held is written.
+
+Also: catalog read errors were discarded, turning a broken service-role read
+into a silent $0.00 portfolio with a 200 status; a missing service-role key
+degraded to an unpriced collection instead of saying so; `sinceLabel` mixed
+local time with UTC-midnight parsing, so after midday UTC yesterday was
+labelled "2 days ago"; and `Number(null)` is `0`, so a malformed request became
+a 500 with a raw Postgres message instead of the 400 already written for it.
+
+**The pattern is the same one this file keeps recording.** Every one of these
+passed 66 tests, a clean typecheck and a clean build. None was findable without
+either reading the code adversarially or running it against a real database.

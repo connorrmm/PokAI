@@ -17,6 +17,20 @@ import { loadCollection } from '@/lib/portfolio';
  */
 export const runtime = 'nodejs';
 
+function notConfigured() {
+  return NextResponse.json(
+    {
+      error: {
+        message: 'The portfolio is unavailable because this deployment is missing Supabase keys. '
+          + 'Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY and '
+          + 'SUPABASE_SERVICE_ROLE_KEY in Vercel → Settings → Environment Variables, then redeploy.',
+        code: 'supabase_not_configured',
+      },
+    },
+    { status: 503 },
+  );
+}
+
 export async function GET(req: Request) {
   const token = bearerToken(req);
   if (!token) {
@@ -27,21 +41,15 @@ export async function GET(req: Request) {
   }
 
   const db = asUser(token);
-  if (!db) {
-    return NextResponse.json(
-      {
-        error: {
-          message: 'The portfolio is unavailable because this deployment has no Supabase keys. '
-            + 'Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY and '
-            + 'SUPABASE_SERVICE_ROLE_KEY in Vercel → Settings → Environment Variables, then redeploy.',
-          code: 'supabase_not_configured',
-        },
-      },
-      { status: 503 },
-    );
-  }
+  if (!db) return notConfigured();
 
-  const result = await loadCollection(db, admin());
+  // A null admin client means the catalog cannot be read, so every card would
+  // come back unpriced and the total would read $0.00 -- indistinguishable
+  // from a genuinely worthless collection. Say so instead.
+  const sb = admin();
+  if (!sb) return notConfigured();
+
+  const result = await loadCollection(db, sb);
   if ('error' in result) {
     return NextResponse.json(
       { error: { message: result.error, code: result.code } }, { status: result.status },
@@ -97,7 +105,14 @@ export async function GET(req: Request) {
   // Change since the previous RECORDED day, not "today" in the abstract. The
   // label says which day it is measured against, because a change since three
   // days ago presented as "today" is a small lie that compounds.
-  const previous = series.length >= 2 ? series[series.length - 2] : null;
+  //
+  // Gated on `recorded`. Without that gate, a run where prices failed to load
+  // reports a total of $0.00 and compares it against a real baseline, printing
+  // "▼ down $480.00 (100%)" -- a crash that never happened. That is precisely
+  // the fabrication the comment above the snapshot write claims to prevent,
+  // and skipping the write was not enough on its own: the compare had to be
+  // skipped too.
+  const previous = recorded && series.length >= 2 ? series[series.length - 2] : null;
   const change = previous
     ? {
         since: previous.day,
@@ -111,6 +126,9 @@ export async function GET(req: Request) {
   return NextResponse.json({
     totals,
     change,
+    // True when today's value could not be established, so the page can say so
+    // rather than presenting an unpriced total as a real one.
+    valuationUnavailable: totals.cards > 0 && totals.valued === 0,
     series,
     recorded,
     // Top holdings by total value, for the "what is actually carrying this

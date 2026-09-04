@@ -19,11 +19,19 @@ export function useSession() {
     const sb = supabaseBrowser();
     if (!sb) { setReady(true); return; }
     let alive = true;
-    sb.auth.getSession().then(({ data }) => {
-      if (!alive) return;
-      setSession(data.session);
-      setReady(true);
-    });
+    sb.auth.getSession()
+      .then(({ data }) => {
+        if (!alive) return;
+        setSession(data.session);
+      })
+      .catch((e: unknown) => {
+        // A rejection here (a navigator-lock timeout, storage blocked by
+        // private browsing) used to leave `ready` false forever, so
+        // AddToCollection rendered null and the save button simply never
+        // appeared -- with nothing on screen to explain why.
+        console.warn('Could not read the saved session:', e);
+      })
+      .finally(() => { if (alive) setReady(true); });
     const { data: sub } = sb.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => { alive = false; sub.subscription.unsubscribe(); };
   }, []);

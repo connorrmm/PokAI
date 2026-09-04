@@ -43,7 +43,13 @@ export async function GET(req: Request) {
   const db = asUser(token);
   if (!db) return notConfigured();
 
-  const result = await loadCollection(db, admin());
+  // A null admin client means the catalog cannot be read, so every card would
+  // come back unpriced and the total would read $0.00 -- indistinguishable
+  // from a genuinely worthless collection. Say so instead.
+  const sb = admin();
+  if (!sb) return notConfigured();
+
+  const result = await loadCollection(db, sb);
   if ('error' in result) {
     // Rule 4: the real reason. An expired token and a broken policy are very
     // different problems and only the message tells them apart.
@@ -76,9 +82,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const cardId = Number(body.cardId);
+  // Number(null) is 0 and Number('') is 0, both of which passed isFinite and
+  // then failed deep in the database as a foreign-key violation -- a 500 with
+  // a raw Postgres message, when a 400 was already written right here.
+  const raw = body.cardId;
+  const cardId = typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '')
+    ? Number(raw) : NaN;
   const name = typeof body.name === 'string' ? body.name.trim() : '';
-  if (!Number.isFinite(cardId) || !name) {
+  if (!Number.isInteger(cardId) || cardId <= 0 || !name) {
     return NextResponse.json(
       { error: { message: 'A card id and name are required to add a card.', code: 'bad_request' } },
       { status: 400 },
@@ -86,52 +97,34 @@ export async function POST(req: Request) {
   }
   const quantity = Number.isFinite(Number(body.quantity)) ? Math.max(1, Math.trunc(Number(body.quantity))) : 1;
 
-  const { data: userRes } = await db.auth.getUser();
-  const userId = userRes?.user?.id;
-  if (!userId) return unauthorised();
-
-  // Already own it? Add to the count rather than making a second row, so a
-  // playset reads as "4x Flareon" and not four identical lines.
-  const { data: existing, error: findErr } = await db
-    .from('collections')
-    .select('id, quantity')
-    .eq('card_id', cardId)
-    .limit(1);
-
-  if (findErr) {
-    return NextResponse.json({ error: { message: findErr.message, code: findErr.code } }, { status: 500 });
-  }
-
-  if (existing && existing.length) {
-    const row = existing[0];
-    const { error } = await db
-      .from('collections')
-      .update({ quantity: row.quantity + quantity })
-      .eq('id', row.id);
-    if (error) {
-      return NextResponse.json({ error: { message: error.message, code: error.code } }, { status: 500 });
-    }
-    return NextResponse.json({ ok: true, id: row.id, quantity: row.quantity + quantity });
-  }
-
-  const { data, error } = await db
-    .from('collections')
-    .insert({
-      user_id: userId,
-      card_id: cardId,
-      quantity,
-      // The first-party snapshot migration 0005 exists for. Without these the
-      // user's collection would be destroyed by a catalog purge, which is the
-      // one thing the licence says is genuinely ours to keep.
-      card_name: name,
-      card_set_name: typeof body.setName === 'string' ? body.setName : null,
-      card_number: typeof body.number === 'string' ? body.number : null,
-    })
-    .select('id, quantity')
-    .single();
+  // One atomic upsert instead of read-then-write. Two quick taps used to race
+  // each other and lose an increment, and could leave the same card on two
+  // rows. The function (migration 0007) runs as the caller, so row-level
+  // security applies exactly as it would to a direct insert.
+  const { data: newId, error } = await db.rpc('add_card_to_collection', {
+    p_card_id: cardId,
+    p_quantity: quantity,
+    p_name: name,
+    p_set_name: typeof body.setName === 'string' ? body.setName : null,
+    p_number: typeof body.number === 'string' ? body.number : null,
+    p_condition: null,
+  });
 
   if (error) {
-    return NextResponse.json({ error: { message: error.message, code: error.code } }, { status: 500 });
+    // A foreign-key failure here means the card is not in our catalog, which
+    // is a real and specific problem -- say which, rather than passing a raw
+    // Postgres message to a collector (rule 4).
+    const missingCard = /foreign key|violates/i.test(error.message);
+    return NextResponse.json({
+      error: {
+        message: missingCard
+          ? 'That card is not in our card database yet, so it cannot be saved. '
+            + 'Scan it again — looking a card up is what adds it.'
+          : error.message,
+        code: error.code,
+      },
+    }, { status: missingCard ? 409 : 500 });
   }
-  return NextResponse.json({ ok: true, id: data.id, quantity: data.quantity });
+
+  return NextResponse.json({ ok: true, id: newId });
 }
