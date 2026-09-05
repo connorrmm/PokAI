@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabaseBrowser, SUPABASE_NOT_CONFIGURED } from '@/lib/supabase/browser';
+import { captchaToken } from '@/lib/captcha';
 
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
@@ -37,7 +38,13 @@ export function useSession() {
         // The alternative was storing collections in the browser, which loses
         // everything the moment someone clears their data. A collection that
         // can evaporate is worse than one that needs an account.
-        const { data: anon, error } = await sb.auth.signInAnonymously();
+        // Supabase applies CAPTCHA protection to sign-ins, anonymous ones
+        // included. Resolves null until a sitekey is configured, so this is a
+        // no-op today and correct the moment one is added.
+        const token = await captchaToken();
+        const { data: anon, error } = await sb.auth.signInAnonymously(
+          token ? { options: { captchaToken: token } } : undefined,
+        );
         if (!alive) return;
         if (error) {
           // Rule 4: pass the real reason through. "Anonymous sign-ins are
@@ -79,9 +86,14 @@ export default function Auth({ onDone }: { onDone?: () => void }) {
     const sb = supabaseBrowser();
     if (!sb) { setError(SUPABASE_NOT_CONFIGURED); return; }
     setBusy(true);
+    // A token is single-use, so the email path fetches its own.
+    const token = await captchaToken();
     const { error: err } = await sb.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
+      options: {
+        emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        ...(token ? { captchaToken: token } : {}),
+      },
     });
     setBusy(false);
     // Rule 4: pass the provider's own words through. "Email rate limit

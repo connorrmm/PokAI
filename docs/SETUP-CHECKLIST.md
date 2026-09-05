@@ -199,3 +199,44 @@ the error names the setting.
 **Why anonymous rather than storing collections in the browser:** browser
 storage is wiped by clearing site data, private browsing, or switching phones.
 A collection that can evaporate is worse than one that needs an account.
+
+---
+
+## CAPTCHA on anonymous sign-ins — the remaining abuse gap
+
+**Why.** The app creates an account for anyone who opens it, and each account
+may run 300 scans a day (migration 0008). That cap bounds ONE account. Nothing
+bounds how many a script can create, and every new one gets its own 300 — so
+the total spend is unbounded until this is closed. Supabase says as much on the
+anonymous sign-ins screen.
+
+**Cloudflare Turnstile**, chosen over hCaptcha: free with no volume cap, and it
+passes silently in most cases where hCaptcha shows a puzzle. The check runs at
+the exact moment the app was designed to have no friction, so invisible is the
+requirement rather than a preference.
+
+**The app code is already written and shipped.** It is inert until configured —
+with no sitekey it resolves to nothing and sign-in behaves exactly as it does
+today. Nothing breaks if this is never done, and nothing needs coordinating.
+
+Three steps, in this order:
+
+1. **cloudflare.com → Turnstile → Add site.** Domain `pok-ai-drab.vercel.app`.
+   Widget mode **Managed**. It gives a **site key** (public) and a **secret
+   key** (private).
+2. **The site key → Vercel** as `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, all three
+   environments, then redeploy. Public by design; it ships in the browser.
+3. **The secret key → Supabase** → Authentication → Attack Protection → enable
+   CAPTCHA, provider Turnstile, paste the secret. **Straight from Cloudflare to
+   Supabase — never through a chat, a file, or this repository.**
+
+Order matters. Enabling it in Supabase first, before the sitekey is deployed,
+means every sign-in is rejected for a missing token and the app stops working
+for everyone.
+
+`/api/health` reports whether the site key is set.
+
+**If Turnstile is unreachable or times out**, the app continues without a token
+rather than stranding anyone on a blank screen. Supabase then rejects that
+sign-in with a message naming the reason, which is recoverable; an app that
+silently never loads is not.

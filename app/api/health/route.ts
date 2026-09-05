@@ -46,6 +46,12 @@ export async function GET() {
       required: false,
       used_for: 'Reading card names, art and prices for a collection. The catalog is server-only for licence compliance, so only the server may read it. NEVER put this in client code - it bypasses row-level security entirely.',
     },
+    {
+      name: 'NEXT_PUBLIC_TURNSTILE_SITE_KEY',
+      set: Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY),
+      required: false,
+      used_for: 'Cloudflare Turnstile, which stops a script mass-creating anonymous accounts to spend the scanning budget. Public by design. Until it is set the captcha code is inert and sign-in behaves as before; it must be set here AND the secret added in Supabase for protection to actually apply.',
+    },
   ];
 
   const missingRequired = vars.filter((v) => v.required && !v.set).map((v) => v.name);
