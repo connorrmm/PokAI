@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Auth, { useSession } from './Auth';
 import Sparkline, { type Point } from './Sparkline';
+import KeepCollection from './KeepCollection';
 import type { Score, Achievement } from '@/lib/score';
 import { tierOf, TIER_LABEL, TIER_COLOUR } from '@/lib/tier';
 
@@ -91,7 +92,7 @@ function SectionLabel({ children, hint }: { children: React.ReactNode; hint?: st
 }
 
 export default function Portfolio({ active = true }: { active?: boolean }) {
-  const { session, ready, signInError } = useSession();
+  const { session, ready, signInError, isAnonymous } = useSession();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -261,6 +262,10 @@ export default function Portfolio({ active = true }: { active?: boolean }) {
           {data.top.map((h) => <PullRow key={`top-${h.id}`} h={h} />)}
         </>
       )}
+
+      {/* The other half of signing people in anonymously: a way out of it,
+          offered once there is something worth keeping. */}
+      {isAnonymous && <KeepCollection cardCount={data.totals.cards} />}
 
       {data.totals.cards === 0 && (
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 18 }}>
