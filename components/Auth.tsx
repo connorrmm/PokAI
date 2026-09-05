@@ -14,15 +14,39 @@ import { supabaseBrowser, SUPABASE_NOT_CONFIGURED } from '@/lib/supabase/browser
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   useEffect(() => {
     const sb = supabaseBrowser();
     if (!sb) { setReady(true); return; }
     let alive = true;
     sb.auth.getSession()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!alive) return;
-        setSession(data.session);
+        if (data.session) { setSession(data.session); return; }
+
+        // No session: make one WITHOUT asking for anything.
+        //
+        // Sterling: "instead of needing to send an email to yourself, people
+        // just want to see it when they pull up the app." An anonymous account
+        // is a real account -- row-level security applies to it exactly as to
+        // any other, so a collection is private from the first scan -- it just
+        // has no email attached yet. Adding an email later keeps the same
+        // account and carries the collection to other devices.
+        //
+        // The alternative was storing collections in the browser, which loses
+        // everything the moment someone clears their data. A collection that
+        // can evaporate is worse than one that needs an account.
+        const { data: anon, error } = await sb.auth.signInAnonymously();
+        if (!alive) return;
+        if (error) {
+          // Rule 4: pass the real reason through. "Anonymous sign-ins are
+          // disabled" is a switch in the Supabase dashboard, and no amount of
+          // retrying fixes it -- but the message names it exactly.
+          setSignInError(error.message);
+          return;
+        }
+        setSession(anon.session);
       })
       .catch((e: unknown) => {
         // A rejection here (a navigator-lock timeout, storage blocked by
@@ -40,7 +64,7 @@ export function useSession() {
     await supabaseBrowser()?.auth.signOut();
   }, []);
 
-  return { session, ready, signOut };
+  return { session, ready, signOut, signInError, isAnonymous: session?.user?.is_anonymous === true };
 }
 
 export default function Auth({ onDone }: { onDone?: () => void }) {

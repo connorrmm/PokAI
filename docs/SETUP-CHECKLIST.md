@@ -177,3 +177,25 @@ hour** and is for testing only. Fine for the two of us; it will not survive
 real users. Before launch this needs a real sending service (Resend, Postmark
 or similar) configured under Authentication → Emails. That is a paid service at
 volume, so it is a decision for later, not a purchase to make now.
+
+---
+
+## One switch to flip: anonymous sign-ins (2026-09-04)
+
+The app now creates an account by itself the first time someone opens it, so
+the portfolio is simply there — no email, no password, nothing to do before
+seeing your collection. It is a real account with real row-level security; it
+just has no email attached yet, and adding one later keeps the same collection.
+
+**This needs one setting turned on**, and until it is, the portfolio falls back
+to asking for an email:
+
+> Supabase dashboard → **Authentication** → **Sign In / Providers** →
+> **Anonymous sign-ins** → enable
+
+If it is off, the app says so in its own words rather than failing silently —
+the error names the setting.
+
+**Why anonymous rather than storing collections in the browser:** browser
+storage is wiped by clearing site data, private browsing, or switching phones.
+A collection that can evaporate is worse than one that needs an account.

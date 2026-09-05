@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { asUser, admin, bearerToken } from '@/lib/supabase/server';
 import { loadCollection } from '@/lib/portfolio';
+import { computeCollectionScore, achievements } from '@/lib/score';
 
 /**
  * The portfolio: what the collection is worth now, and what it has been worth.
@@ -123,9 +124,19 @@ export async function GET(req: Request) {
       }
     : null;
 
+  const scoreCards = items.map((i) => ({
+    rarity: i.rarity, setName: i.setName, quantity: i.quantity,
+  }));
+
   return NextResponse.json({
     totals,
     change,
+    score: computeCollectionScore({ totalValue: totals.marketValue, cards: scoreCards }),
+    achievements: achievements({
+      cardCount: totals.cards, totalValue: totals.marketValue, cards: scoreCards,
+    }),
+    // "Recent pulls" in the prototype: the cards most recently added.
+    recent: items.slice(0, 8),
     // True when today's value could not be established, so the page can say so
     // rather than presenting an unpriced total as a real one.
     valuationUnavailable: totals.cards > 0 && totals.valued === 0,

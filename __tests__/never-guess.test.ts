@@ -19,6 +19,8 @@ import {
 } from '../lib/scanner/number';
 import { sharpnessScore, clippedFraction, frameScore } from '../lib/scanner/sharpness';
 import { resolveCandidates } from '../lib/scanner/resolve';
+import { computeCollectionScore, achievements } from '../lib/score';
+import { tierOf } from '../lib/tier';
 import type { ApiCard, RankedCandidate } from '../lib/scanner/types';
 import {
   otsuThreshold, percentileRange, hammingDistance, hashSimilarity, toGray,
@@ -727,5 +729,100 @@ describe('resolveCandidates', () => {
     expect(out.ranked[0].apiCard.id).toBe(2);
     expect(out.uniquelyResolved).toBe(false);
     expect(out.counts.setTotalMatches).toBe(1);
+  });
+});
+
+/**
+ * Collection Score, ported from the prototype. A number a collector will judge
+ * their collection by, so it gets the same treatment as the money paths.
+ */
+describe('computeCollectionScore', () => {
+  const c = (rarity: string | null, setName: string | null, quantity = 1) => ({ rarity, setName, quantity });
+
+  it('scores an empty collection at zero', () => {
+    const s = computeCollectionScore({ totalValue: 0, cards: [] });
+    expect(s.total).toBe(0);
+  });
+
+  it('uses log10 of value, so money has diminishing returns', () => {
+    // The prototype's formula exactly: min(400, round(log10(v) * 90)).
+    expect(computeCollectionScore({ totalValue: 100, cards: [] }).value).toBe(180);
+    expect(computeCollectionScore({ totalValue: 10_000, cards: [] }).value).toBe(360);
+    // And it caps, so a huge collection cannot swamp every other component.
+    expect(computeCollectionScore({ totalValue: 10_000_000, cards: [] }).value).toBe(400);
+  });
+
+  it('weights rarity by tier and counts duplicates', () => {
+    const one = computeCollectionScore({ totalValue: 0, cards: [c('Secret Rare', 'A')] });
+    const two = computeCollectionScore({ totalValue: 0, cards: [c('Secret Rare', 'A', 2)] });
+    expect(one.rarity).toBe(200);      // 50 points x 4
+    expect(two.rarity).toBe(300);      // capped
+    expect(computeCollectionScore({ totalValue: 0, cards: [c('Common', 'A')] }).rarity).toBe(4);
+  });
+
+  it('rewards breadth across sets, not repeats of one', () => {
+    const spread = computeCollectionScore({
+      totalValue: 0, cards: [c('Common', 'A'), c('Common', 'B'), c('Common', 'C')],
+    });
+    const same = computeCollectionScore({
+      totalValue: 0, cards: [c('Common', 'A'), c('Common', 'A'), c('Common', 'A')],
+    });
+    expect(spread.sets).toBe(90);
+    expect(same.sets).toBe(30);
+  });
+
+  it('reports vintage as unknown rather than zero', () => {
+    // Set release dates are not cached. Returning 0 would be a wrong answer
+    // wearing the clothes of a real one.
+    const s = computeCollectionScore({ totalValue: 100, cards: [c('Common', 'A')] });
+    expect(s.vintage).toBeNull();
+    expect(s.measurableMax).toBe(850);
+  });
+});
+
+describe('tierOf', () => {
+  it('reads the tier out of real catalog rarity text', () => {
+    expect(tierOf('Common')).toBe('common');
+    expect(tierOf('Uncommon')).toBe('uncommon');
+    expect(tierOf('Rare')).toBe('rare');
+    expect(tierOf('Rare Holo')).toBe('holo');
+    expect(tierOf('Double Rare')).toBe('holo');
+    expect(tierOf('Secret Rare')).toBe('secret');
+    expect(tierOf('Illustration Rare')).toBe('secret');
+  });
+
+  it('puts Special Illustration Rare in secret, not rare', () => {
+    // Order-dependent: it contains "rare" and "illustration" both.
+    expect(tierOf('Special Illustration Rare')).toBe('secret');
+  });
+
+  it('falls back to common for anything unrecognised', () => {
+    expect(tierOf(null)).toBe('common');
+    expect(tierOf('')).toBe('common');
+    expect(tierOf('Promo')).toBe('common');
+  });
+});
+
+describe('achievements', () => {
+  it('unlocks only what the collection has actually earned', () => {
+    const none = achievements({ cardCount: 0, totalValue: 0, cards: [] });
+    expect(none.every((a) => !a.earned)).toBe(true);
+
+    const some = achievements({
+      cardCount: 12, totalValue: 1500,
+      cards: [
+        { rarity: 'Secret Rare', setName: 'A' },
+        { rarity: 'Common', setName: 'B' },
+        { rarity: 'Common', setName: 'C' },
+      ],
+    });
+    const earned = some.filter((a) => a.earned).map((a) => a.id);
+    expect(earned).toContain('first_scan');
+    expect(earned).toContain('ten_cards');
+    expect(earned).toContain('first_secret');
+    expect(earned).toContain('set_collector');
+    expect(earned).toContain('value_1k');
+    expect(earned).not.toContain('hundred_cards');
+    expect(earned).not.toContain('value_20k');
   });
 });
