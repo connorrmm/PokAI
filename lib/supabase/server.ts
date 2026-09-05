@@ -44,6 +44,23 @@ export function admin(): SupabaseClient | null {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+/**
+ * Which Supabase variables are missing, by name.
+ *
+ * Rule 4, applied to our own error messages: listing all three and letting the
+ * reader work out which one is absent is a generic failure wearing a helpful
+ * costume. Names only -- never a value, since two of these are secrets.
+ */
+export function missingSupabaseEnv(): string[] {
+  const missing: string[] = [];
+  if (!env('NEXT_PUBLIC_SUPABASE_URL')) missing.push('NEXT_PUBLIC_SUPABASE_URL');
+  if (!env('NEXT_PUBLIC_SUPABASE_ANON_KEY')) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  if (!env('SUPABASE_SERVICE_ROLE_KEY') && !env('SUPABASE_SECRET_KEY')) {
+    missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  }
+  return missing;
+}
+
 /** Pull a bearer token off a request, or null. */
 export function bearerToken(req: Request): string | null {
   const h = req.headers.get('authorization') || '';

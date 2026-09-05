@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { asUser, admin, bearerToken } from '@/lib/supabase/server';
+import { asUser, admin, bearerToken, missingSupabaseEnv } from '@/lib/supabase/server';
 
 /**
  * Scan history (Tier 1 MVP item 7) and corrections (item 8).
@@ -25,11 +25,20 @@ function unauthorised() {
   );
 }
 function notConfigured() {
+  const missing = missingSupabaseEnv();
   return NextResponse.json(
     {
       error: {
-        message: 'Scan history is unavailable because this deployment has no Supabase keys.',
+        // Name the variable that is actually absent. "Add these three" when
+        // two are already set sends someone hunting for a problem that is not
+        // there (rule 4).
+        message: missing.length
+          ? `This deployment is missing ${missing.join(' and ')} in its server environment. `
+            + 'Add it in Vercel → Settings → Environment Variables, then redeploy — '
+            + 'NEXT_PUBLIC_ variables are baked in at build time, so a redeploy is required.'
+          : 'Supabase is configured but could not be reached.',
         code: 'supabase_not_configured',
+        missing,
       },
     },
     { status: 503 },

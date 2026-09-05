@@ -38,7 +38,11 @@ export async function GET() {
     },
     {
       name: 'SUPABASE_SERVICE_ROLE_KEY',
-      set: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      // Supabase now issues these as `sb_secret_...` under the name
+      // SUPABASE_SECRET_KEY. Either satisfies the server, so either counts
+      // here -- reporting "missing" for a key that is present under its other
+      // name sends someone hunting for a problem that is not there.
+      set: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY),
       required: false,
       used_for: 'Reading card names, art and prices for a collection. The catalog is server-only for licence compliance, so only the server may read it. NEVER put this in client code - it bypasses row-level security entirely.',
     },
