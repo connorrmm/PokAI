@@ -6,6 +6,7 @@ import { resolveCandidates, SIGNAL_CERTAINTY_FLOOR } from '@/lib/scanner/resolve
 import { computeConfidence, autoAcceptFloorFor, isClearlyBest } from '@/lib/scanner/confidence';
 import { decide } from '@/lib/scanner/decide';
 import { rateLimit, clientKey } from '@/lib/rate-limit';
+import { asUser, bearerToken } from '@/lib/supabase/server';
 import type { ApiCard } from '@/lib/scanner/types';
 
 /**
@@ -29,12 +30,79 @@ function usageOf(v: { inputTokens: number; outputTokens: number; elapsedMs: numb
   return { inputTokens: v.inputTokens, outputTokens: v.outputTokens, elapsedMs: v.elapsedMs };
 }
 
+/**
+ * The most scans one account may run in a UTC day.
+ *
+ * Generous on purpose: photographing a full binder is a legitimate few hundred
+ * scans, and a cap that stops a real collector mid-binder is a worse failure
+ * than one that costs a few dollars. At roughly $0.0078 a scan this bounds a
+ * single account to about $2.34 a day.
+ */
+const DAILY_SCAN_CAP = 300;
+
 export async function POST(req: Request) {
+  // A scan costs real money, so it must belong to somebody.
+  //
+  // This endpoint previously required no authentication at all, and its only
+  // control was an in-memory per-IP counter -- per serverless instance, reset
+  // on every cold start. Anyone with the URL could spend the project's
+  // Anthropic credit.
+  //
+  // Requiring a session costs legitimate users nothing: the app signs everyone
+  // in anonymously the moment it opens, so there is nobody to shut out.
+  const token = bearerToken(req);
+  const db = token ? asUser(token) : null;
+  if (!db) {
+    return NextResponse.json(
+      {
+        error: {
+          message: 'Scanning needs a session. Reload the app — it signs you in automatically. '
+            + 'If this keeps happening, anonymous sign-ins may be disabled in Supabase.',
+          code: 'not_signed_in',
+        },
+      },
+      { status: 401 },
+    );
+  }
+
+  // A per-IP speed bump, still useful against a burst from one machine, but
+  // no longer the only thing standing between a stranger and the bill.
   const rl = rateLimit(clientKey(req), 20, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: { message: 'Too many scans. Please wait a moment.', code: 'rate_limited' } },
       { status: 429, headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } },
+    );
+  }
+
+  // The durable cap. Counted in the database, so it holds across every
+  // serverless instance and survives cold starts -- unlike the counter above.
+  // Counted BEFORE the model runs, because the point is to not spend the money.
+  const { data: used, error: usageErr } = await db.rpc('bump_scan_usage');
+  if (usageErr) {
+    // Fail closed. If usage cannot be counted, the spend cannot be bounded,
+    // and quietly scanning anyway is how a capped service ends up uncapped.
+    return NextResponse.json(
+      {
+        error: {
+          message: `Could not check your scan allowance, so this scan was not run: ${usageErr.message}`,
+          code: 'usage_check_failed',
+        },
+      },
+      { status: 503 },
+    );
+  }
+  if (typeof used === 'number' && used > DAILY_SCAN_CAP) {
+    return NextResponse.json(
+      {
+        error: {
+          message: `That is ${DAILY_SCAN_CAP} scans today, which is the daily limit. `
+            + 'It resets at midnight UTC. If you are genuinely scanning more than this, '
+            + 'say so and the limit can be raised.',
+          code: 'daily_cap_reached',
+        },
+      },
+      { status: 429 },
     );
   }
 

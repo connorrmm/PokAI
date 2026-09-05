@@ -818,3 +818,58 @@ a 500 with a raw Postgres message instead of the 400 already written for it.
 **The pattern is the same one this file keeps recording.** Every one of these
 passed 66 tests, a clean typecheck and a clean build. None was findable without
 either reading the code adversarially or running it against a real database.
+
+## 15. Anonymous sign-ins, and the spend they exposed — 2026-09-04
+
+Anonymous sign-ins were enabled so the app needs no email. Supabase warns about
+two things on that screen. Both were checked rather than assumed.
+
+### 1. Anonymous users get the `authenticated` role — policies audited, clean
+
+Every policy on every table, read from the live database:
+
+| Table | Policies | Rule |
+|---|---|---|
+| collections, scans, corrections, portfolio_snapshots, scan_usage | select / insert / update / delete | `auth.uid() = user_id` |
+| profiles | select / insert / update | `auth.uid() = id` |
+
+**No policy grants blanket access to `authenticated`.** An anonymous account is
+therefore confined to its own rows exactly like any other. The catalog tables
+(`cards`, `card_prices`, `card_sets`) have RLS on with **no policies at all**
+and their grants revoked, so they remain unreadable to both roles — the licence
+lockdown from migration 0004 holds.
+
+### 2. The cost warning was right, and pointed at something worse
+
+`/api/identify` **required no authentication at all.** Its only control was an
+in-memory per-IP counter, which on Vercel means per serverless instance and
+resets on every cold start — `lib/rate-limit.ts` said so in its own comment and
+it was never revisited. Anyone with the URL could spend the project's Anthropic
+credit, and had been able to for as long as it has been deployed.
+
+Anonymous sign-ins did not create that hole. They make it scriptable, which is
+exactly why Supabase recommends CAPTCHA alongside them.
+
+**Fixed, in the half that belongs in our code:**
+
+- **Scanning now requires a session.** Costs legitimate users nothing, because
+  the app signs everyone in anonymously on open — there is nobody to shut out.
+- **A durable daily cap of 300 scans per account** (migration 0008), counted in
+  the database so it holds across every instance and survives cold starts.
+  Counted BEFORE the model runs, because the point is not to spend the money.
+  At ~$0.0078 a scan that bounds one account to about $2.34 a day.
+- **Fails closed.** If usage cannot be counted, the scan does not run. Scanning
+  anyway is how a capped service quietly becomes an uncapped one.
+- Generous on purpose: photographing a binder is a legitimate few hundred
+  scans, and stopping a real collector mid-binder is a worse failure than a few
+  dollars.
+
+Verified against the live database: two calls returned 1 then 2, attributed to
+the calling user; test rows deleted.
+
+### Still open, and it is Sterling's to decide
+
+**CAPTCHA on anonymous sign-ins.** The cap bounds one account. Nothing yet
+bounds how many accounts a script can create, and each new one gets its own
+300. Supabase supports hCaptcha and Cloudflare Turnstile; both have free tiers.
+Worth doing before the URL is public anywhere.

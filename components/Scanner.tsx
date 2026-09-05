@@ -4,6 +4,7 @@ import { identifyCard } from '@/lib/scanner/identify';
 import { identifyWithVision } from '@/lib/scanner/identify-vision';
 import type { CardRead } from '@/lib/scanner/vision-types';
 import { warmUpOcr } from '@/lib/scanner/ocr-client';
+import { useSession } from './Auth';
 import AddToCollection from './AddToCollection';
 import type { ApiCard, IdentifyResult, ScanDiagnostics } from '@/lib/scanner/types';
 import { frameScore, READABLE_SHARPNESS, GLARE_FRACTION } from '@/lib/scanner/sharpness';
@@ -28,6 +29,9 @@ function priceAge(c: ApiCard): string | null {
 }
 
 export default function Scanner() {
+  // Scans are attributed to an account so the spend is bounded. The app signs
+  // everyone in anonymously on open, so this is present without anyone acting.
+  const { session } = useSession();
   const videoRef = useRef<HTMLVideoElement>(null);
   /**
    * Live quality of the number region, sampled while the camera is open, and
@@ -518,7 +522,7 @@ export default function Scanner() {
     setStatus('Reading card…');
 
     try {
-      const { result, vision: v } = await identifyWithVision(cardPhoto);
+      const { result, vision: v } = await identifyWithVision(cardPhoto, session?.access_token);
       setVision(v);
       setOutcome(captureInfo && result.diagnostics
         ? { ...result, diagnostics: { ...result.diagnostics, ...captureInfo } }

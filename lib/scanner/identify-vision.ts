@@ -152,7 +152,11 @@ export function cropNumberRegions(dataUrl: string, maxWidth = 1100): Promise<Num
   });
 }
 
-export async function identifyWithVision(cardPhoto: string): Promise<VisionScan> {
+export async function identifyWithVision(
+  cardPhoto: string,
+  /** The signed-in session's token. Scanning costs money, so it is attributed. */
+  accessToken?: string | null,
+): Promise<VisionScan> {
   const startedAt = Date.now();
   const [small, crops] = await Promise.all([
     downscale(cardPhoto),
@@ -163,7 +167,10 @@ export async function identifyWithVision(cardPhoto: string): Promise<VisionScan>
 
   const res = await fetch('/api/identify', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify({
       image: small,
       numberCrops: crops ? { left: crops.left, right: crops.right } : null,
