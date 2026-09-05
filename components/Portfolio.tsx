@@ -9,6 +9,7 @@ import { tierOf, TIER_LABEL, TIER_COLOUR } from '@/lib/tier';
 interface Holding {
   id: number; name: string | null; setName: string | null; number: string | null;
   rarity: string | null; imageUrl: string | null; marketPrice: number | null; quantity: number;
+  condition: string | null;
 }
 
 /** One row of the collection, as the prototype's "recent pulls" list. */
@@ -36,6 +37,7 @@ function PullRow({ h }: { h: Holding }) {
         </div>
         <div className="mono" style={{ color: 'var(--muted)', fontSize: 11 }}>
           {[h.setName, h.number].filter(Boolean).join(' · ')}
+          {h.condition && <span style={{ color: 'var(--gold)' }}> · {h.condition}</span>}
         </div>
       </div>
       <div className="mono" style={{ fontSize: 13, fontWeight: 600, flexShrink: 0 }}>

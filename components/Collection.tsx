@@ -6,6 +6,7 @@ interface Item {
   id: number;
   cardId: number | null;
   quantity: number;
+  condition: string | null;
   name: string | null;
   setName: string | null;
   number: string | null;
@@ -108,6 +109,9 @@ export default function Collection() {
             </div>
             <div className="mono" style={{ color: 'var(--muted)', fontSize: 11 }}>
               {[it.setName, it.number, it.rarity].filter(Boolean).join(' · ')}
+              {it.condition && (
+                <span style={{ color: 'var(--gold)' }}> · {it.condition}</span>
+              )}
             </div>
           </div>
           <div className="mono" style={{ textAlign: 'right', flexShrink: 0, fontSize: 14, fontWeight: 600 }}>

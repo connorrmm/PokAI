@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { asUser, admin, bearerToken, missingSupabaseEnv } from '@/lib/supabase/server';
 import { loadCollection } from '@/lib/portfolio';
+import { parseCondition } from '@/lib/condition';
 
 /**
  * A user's collection.
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
     setName?: string | null;
     number?: string | null;
     quantity?: number;
+    condition?: string | null;
   };
   try {
     body = await req.json();
@@ -113,7 +115,10 @@ export async function POST(req: Request) {
     p_name: name,
     p_set_name: typeof body.setName === 'string' ? body.setName : null,
     p_number: typeof body.number === 'string' ? body.number : null,
-    p_condition: null,
+    // Validated, never passed through raw: condition is part of the key that
+    // separates one holding from another, so free text would let the same card
+    // fragment into unlimited rows.
+    p_condition: parseCondition(body.condition),
   });
 
   if (error) {

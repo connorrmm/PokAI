@@ -9,6 +9,7 @@
  * again to keep it.
  */
 import { useState } from 'react';
+import { CONDITIONS, CONDITION_SHORT, type Condition } from '@/lib/condition';
 import type { ApiCard } from '@/lib/scanner/types';
 import type { CardRead } from '@/lib/scanner/vision-types';
 import { logScan } from '@/lib/scan-log';
@@ -39,6 +40,12 @@ export default function AddToCollection({
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  /**
+   * Unset by default, never Near Mint. Defaulting to the best grade quietly
+   * inflates every collection whose owner never touches this, and the person
+   * who would notice is the one who trusted the total.
+   */
+  const [condition, setCondition] = useState<Condition | null>(null);
 
   async function add() {
     const token = session?.access_token;
@@ -56,6 +63,7 @@ export default function AddToCollection({
           name: card.name,
           setName: card.setName,
           number: card.number,
+          condition,
         }),
       });
       const json = await res.json().catch(() => null);
@@ -110,6 +118,35 @@ export default function AddToCollection({
 
   return (
     <div style={{ marginTop: 12 }}>
+      {/* Condition is asked, never inferred. A grade is a judgement about
+          edges, surface and centring that a photograph cannot make, and a
+          machine-assigned one would be a valuation nobody agreed to
+          (docs/OPEN-QUESTIONS.md #8). */}
+      <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 6 }}>
+        Condition <span style={{ opacity: 0.7 }}>— optional</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        {CONDITIONS.map((c) => {
+          const on = condition === c;
+          return (
+            <button
+              key={c} onClick={() => setCondition(on ? null : c)}
+              aria-pressed={on} title={c}
+              className="mono"
+              style={{
+                flex: 1, padding: '8px 2px', borderRadius: 10, cursor: 'pointer',
+                fontSize: 11, fontWeight: 700,
+                background: on ? 'rgba(232,72,58,0.16)' : 'var(--panel)',
+                color: on ? 'var(--accent-warm)' : 'var(--muted)',
+                border: `1px solid ${on ? 'rgba(232,72,58,0.45)' : 'var(--border)'}`,
+              }}
+            >
+              {CONDITION_SHORT[c]}
+            </button>
+          );
+        })}
+      </div>
+
       <button
         onClick={add} disabled={state === 'saving'} className="btn-ghost"
         style={{ width: '100%', padding: 13, fontSize: 14, cursor: 'pointer', opacity: state === 'saving' ? 0.6 : 1 }}
