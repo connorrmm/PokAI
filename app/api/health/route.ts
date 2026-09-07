@@ -54,6 +54,19 @@ export async function GET() {
     },
   ];
 
+  // Names that LOOK like one of ours but are not exactly one of ours.
+  //
+  // A variable set as SUPABASE_SERVICE_ROLE (no _KEY), or with a trailing
+  // space, or under a different spelling, reports as simply "not set" and
+  // sends someone hunting through a dashboard for something that is right
+  // there under the wrong name. Names only -- never a value, since these are
+  // the secrets.
+  const known = new Set(vars.map((v) => v.name).concat(['SUPABASE_SECRET_KEY']));
+  const lookalikes = Object.keys(process.env)
+    .filter((k) => /supabase|turnstile|tcgapi|anthropic/i.test(k))
+    .filter((k) => !known.has(k))
+    .sort();
+
   const missingRequired = vars.filter((v) => v.required && !v.set).map((v) => v.name);
 
   return NextResponse.json({
@@ -63,5 +76,8 @@ export async function GET() {
       ? 'All required configuration is present.'
       : `Missing required configuration: ${missingRequired.join(', ')}. Set it in Vercel > Settings > Environment Variables, then redeploy.`,
     config: vars,
+    // Empty is the normal case. Anything here is almost certainly the
+    // variable you think you set, under a name the app is not reading.
+    unexpected_names: lookalikes,
   });
 }
