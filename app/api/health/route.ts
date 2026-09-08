@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { missingSupabaseEnv, envSources } from '@/lib/supabase/server';
+import { missingSupabaseEnv, envSources, serviceRoleCheck } from '@/lib/supabase/server';
 
 /**
  * Liveness check that also reports server configuration.
@@ -117,6 +117,16 @@ export async function GET() {
      * this deployment is using the old one and needs a rebuild.
      */
     env_source: envSources(),
+    /**
+     * Whether the service-role key is ACCEPTED, not merely present.
+     *
+     * Every other field here reports presence, and presence is what hid the
+     * real fault for a day: the key was there, and Supabase was answering
+     * "Invalid API key" to every catalog read. `cards_cached` alongside it says
+     * whether the catalog has anything in it -- zero means no scan has ever
+     * managed to write to it.
+     */
+    service_role: await serviceRoleCheck(),
     // Empty is the normal case. Anything here is almost certainly the
     // variable you think you set, under a name the app is not reading.
     unexpected_names: lookalikes,

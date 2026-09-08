@@ -186,24 +186,45 @@ export async function cardsByIds(refs: CardRef[]): Promise<{ cards: ApiCard[]; e
    * returns every print of it, and picking the closest name would be the
    * confidently-wrong failure this project has already paid for once -- except
    * in dollars on a portfolio rather than a card name on a screen.
+   *
+   * The condition is A PRICE, not a card. The first version of this fell back
+   * only when the direct lookup returned NOTHING, and the direct lookup is a
+   * card DETAIL endpoint: it can perfectly well answer with the card and put
+   * the prices somewhere our normaliser does not read -- per condition, per
+   * printing, in a history array. That is exactly what happened on Sterling's
+   * portfolio: three cards, no errors reported, and $0.00. A card without a
+   * price is a miss.
    */
-  const stillMissing = unique.filter((id) => !cards.some((c) => Number(c.id) === id));
-  for (const id of stillMissing) {
+  const priced = (id: number) =>
+    cards.some((c) => Number(c.id) === id && typeof c.marketPrice === 'number');
+
+  for (const id of unique.filter((id) => !priced(id))) {
     const ref = byId.get(id);
     const query = searchTermFor(ref);
-    if (!query) continue;
+    if (!query) {
+      errors.push(`card ${id}: no price, and no name to search by`);
+      continue;
+    }
     try {
       const res = await fetchWithRetry(
         `${BASE}/search?q=${encodeURIComponent(query)}&game=pokemon&limit=100`,
       );
       const json = (await res.json()) as { data?: TcgApiCard[] };
-      const found = (Array.isArray(json.data) ? json.data : []).find((c) => c.id === id);
+      const found = (Array.isArray(json.data) ? json.data : []).find(
+        (c) => c.id === id && typeof c.market_price === 'number',
+      );
       if (found) {
-        cards.push(normaliseCard(found));
-        // Drop the by-id complaint: we got the card, so it is not a failure
+        // Replace the priceless version from the direct lookup rather than
+        // adding a second entry for the same card.
+        const at = cards.findIndex((c) => Number(c.id) === id);
+        if (at >= 0) cards[at] = normaliseCard(found);
+        else cards.push(normaliseCard(found));
+        // Drop the by-id complaint: we have the price, so it is not a failure
         // the user needs to read about.
         const i = errors.findIndex((e) => e.startsWith(`card ${id}:`));
         if (i >= 0) errors.splice(i, 1);
+      } else if (!errors.some((e) => e.startsWith(`card ${id}:`))) {
+        errors.push(`card ${id}: the card database has no current price for "${query}"`);
       }
     } catch (e) {
       errors.push(`card ${id} (search fallback): ${e instanceof Error ? e.message : String(e)}`);
