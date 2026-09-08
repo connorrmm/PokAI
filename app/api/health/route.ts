@@ -62,9 +62,27 @@ export async function GET() {
   // there under the wrong name. Names only -- never a value, since these are
   // the secrets.
   const known = new Set(vars.map((v) => v.name).concat(['SUPABASE_SECRET_KEY']));
+
+  /**
+   * A name that is itself a credential, masked.
+   *
+   * The first attempt at this reported nothing useful, because it only looked
+   * for names mentioning a service. The actual mistake was a variable whose
+   * NAME was the key and whose value was something else entirely -- and
+   * `sb_secret_...` contains none of those words, so the check that was meant
+   * to catch exactly this could not see it.
+   *
+   * Masked because the whole problem is that a secret ended up in a name
+   * field, and echoing it into a public health endpoint would publish it.
+   */
+  const CREDENTIAL_SHAPED = /^(sb_secret_|sb_publishable_|sk_live_|sk_test_|sk-ant-|tcg_live_|eyJ|service_role)/i;
+  const mask = (k: string) =>
+    `${k.slice(0, Math.min(10, k.length))}…(${k.length} chars, looks like a key in the NAME field)`;
+
   const lookalikes = Object.keys(process.env)
-    .filter((k) => /supabase|turnstile|tcgapi|anthropic/i.test(k))
     .filter((k) => !known.has(k))
+    .filter((k) => /supabase|turnstile|tcgapi|anthropic/i.test(k) || CREDENTIAL_SHAPED.test(k))
+    .map((k) => (CREDENTIAL_SHAPED.test(k) ? mask(k) : k))
     .sort();
 
   const missingRequired = vars.filter((v) => v.required && !v.set).map((v) => v.name);
