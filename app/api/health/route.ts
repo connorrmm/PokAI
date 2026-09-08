@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { missingSupabaseEnv } from '@/lib/supabase/server';
 
 /**
  * Liveness check that also reports server configuration.
@@ -94,6 +95,20 @@ export async function GET() {
       ? 'All required configuration is present.'
       : `Missing required configuration: ${missingRequired.join(', ')}. Set it in Vercel > Settings > Environment Variables, then redeploy.`,
     config: vars,
+    /**
+     * The same variables read the way the APP reads them.
+     *
+     * The `config` list above uses static `process.env.NAME` lookups, which
+     * Next.js REPLACES AT BUILD TIME. Everything in lib/supabase/server.ts
+     * uses a dynamic `process.env[name]` lookup, which cannot be replaced and
+     * so reads the real runtime environment.
+     *
+     * The two can therefore disagree, and when they do, `config` is the
+     * optimistic one -- it can report a variable as present that the running
+     * app cannot actually see. This field is what the app sees. If a name
+     * appears here while `config` says it is set, that gap IS the bug.
+     */
+    missing_at_runtime: missingSupabaseEnv(),
     // Empty is the normal case. Anything here is almost certainly the
     // variable you think you set, under a name the app is not reading.
     unexpected_names: lookalikes,
