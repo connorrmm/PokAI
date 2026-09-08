@@ -25,6 +25,7 @@ export default function Collection() {
   const { session, ready, signOut } = useSession();
   const [items, setItems] = useState<Item[] | null>(null);
   const [totals, setTotals] = useState<Totals | null>(null);
+  const [pricesUnavailable, setPricesUnavailable] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (token: string) => {
@@ -35,6 +36,7 @@ export default function Collection() {
       if (!res.ok) { setError(json?.error?.message || `Could not load your collection (${res.status})`); return; }
       setItems(json.items);
       setTotals(json.totals);
+      setPricesUnavailable(json.pricesUnavailable ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -78,6 +80,17 @@ export default function Collection() {
             )}
           </div>
         </div>
+      )}
+
+      {pricesUnavailable && (
+        <p style={{
+          fontSize: 12.5, color: 'var(--gold)', background: 'rgba(255,176,32,0.08)',
+          border: '1px solid rgba(255,176,32,0.28)', borderRadius: 12, padding: '10px 12px',
+          marginTop: 0,
+        }}>
+          Prices unavailable — the server is missing {pricesUnavailable}. Your cards are
+          all here; only their values are missing.
+        </p>
       )}
 
       {error && (

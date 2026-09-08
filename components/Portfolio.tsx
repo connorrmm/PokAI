@@ -53,6 +53,7 @@ interface Data {
   totals: { cards: number; valued: number; unpriced: number; marketValue: number };
   change: { since: string; absolute: number; percent: number | null } | null;
   valuationUnavailable: boolean;
+  pricesUnavailable: string | null;
   series: Point[];
   top: Holding[];
   recent: Holding[];
@@ -174,7 +175,14 @@ export default function Portfolio({ active = true }: { active?: boolean }) {
         {/* Direction is carried by the ARROW AND THE WORDS. Colour only
             reinforces it -- mint against coral is the red/green pair a
             colour-blind reader cannot separate. */}
-        {data.valuationUnavailable ? (
+        {data.pricesUnavailable ? (
+          // Rule 2 and rule 4 together: say the total is not a valuation, and
+          // say exactly why, rather than showing $0.00 or an empty page.
+          <div style={{ fontSize: 12, marginTop: 4, color: 'var(--gold)' }}>
+            Prices unavailable — the server is missing {data.pricesUnavailable}.
+            Your cards are all here; only their values are missing.
+          </div>
+        ) : data.valuationUnavailable ? (
           // Rule 2: an unpriced total is not a valuation. Never dress one up
           // as a real figure, and never compute a change from it.
           <div style={{ fontSize: 12, marginTop: 4, color: 'var(--gold)' }}>

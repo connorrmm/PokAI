@@ -50,12 +50,15 @@ export async function GET(req: Request) {
   const db = asUser(token);
   if (!db) return notConfigured();
 
-  // A null admin client means the catalog cannot be read, so every card would
-  // come back unpriced and the total would read $0.00 -- indistinguishable
-  // from a genuinely worthless collection. Say so instead.
+  // A null admin client means card art and prices cannot be read. That is a
+  // real degradation and it is reported -- but it must NOT stop the page.
+  //
+  // Refusing outright meant a missing server key showed an error where a
+  // collection should be, which is a worse failure than showing the cards
+  // without prices: the cards are the user's own data and were never the part
+  // that needed the catalog. Rule 2 is satisfied by saying prices are
+  // unavailable, not by hiding everything.
   const sb = admin();
-  if (!sb) return notConfigured();
-
   const result = await loadCollection(db, sb);
   if ('error' in result) {
     // Rule 4: the real reason. An expired token and a broken policy are very
@@ -64,7 +67,12 @@ export async function GET(req: Request) {
       { error: { message: result.error, code: result.code } }, { status: result.status },
     );
   }
-  return NextResponse.json(result);
+  return NextResponse.json({
+    ...result,
+    // Named so the UI can explain a priceless collection rather than
+    // presenting it as a worthless one.
+    pricesUnavailable: sb ? null : missingSupabaseEnv().join(' and ') || 'the card catalog is unreachable',
+  });
 }
 
 export async function POST(req: Request) {
