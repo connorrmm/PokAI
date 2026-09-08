@@ -15,9 +15,44 @@ import 'server-only';
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+/**
+ * The build-time snapshot of the variables we need.
+ *
+ * There are two ways to read the environment in Next.js and they do NOT return
+ * the same thing. A STATIC `process.env.NAME` is textually replaced by its
+ * value when the app is built. A DYNAMIC `process.env[name]` is left alone and
+ * reads whatever the server actually has when the request runs.
+ *
+ * Both can be empty for different reasons -- a build without the variable
+ * present bakes in nothing; a runtime without it exported reads nothing -- and
+ * chasing which of the two was empty cost this project real days. So read both
+ * and prefer the runtime one, which is the value that is current if a key was
+ * ever rotated. Listing the names here is the price: a static read only works
+ * on a literal name, so it cannot be written as a loop.
+ */
+const AT_BUILD: Record<string, string | undefined> = {
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
+};
+
 function env(name: string): string | null {
-  const v = process.env[name];
+  const runtime = process.env[name];
+  const v = runtime && runtime.trim() ? runtime : AT_BUILD[name];
   return v && v.trim() ? v.trim() : null;
+}
+
+/** Where each variable was found, for diagnostics. Never a value. */
+export function envSources(): Record<string, 'runtime' | 'build' | 'absent'> {
+  const names = Object.keys(AT_BUILD);
+  const out: Record<string, 'runtime' | 'build' | 'absent'> = {};
+  for (const n of names) {
+    const runtime = process.env[n];
+    const build = AT_BUILD[n];
+    out[n] = runtime && runtime.trim() ? 'runtime' : (build && build.trim() ? 'build' : 'absent');
+  }
+  return out;
 }
 
 /**

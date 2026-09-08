@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { missingSupabaseEnv } from '@/lib/supabase/server';
+import { missingSupabaseEnv, envSources } from '@/lib/supabase/server';
 
 /**
  * Liveness check that also reports server configuration.
@@ -109,6 +109,14 @@ export async function GET() {
      * appears here while `config` says it is set, that gap IS the bug.
      */
     missing_at_runtime: missingSupabaseEnv(),
+    /**
+     * Where each Supabase variable was actually found: "runtime" (the server
+     * process has it), "build" (only the value baked in when this deployment
+     * was built), or "absent" (neither). A key that reads "build" still works,
+     * but it is the value from build time -- so if it was rotated afterwards,
+     * this deployment is using the old one and needs a rebuild.
+     */
+    env_source: envSources(),
     // Empty is the normal case. Anything here is almost certainly the
     // variable you think you set, under a name the app is not reading.
     unexpected_names: lookalikes,
