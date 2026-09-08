@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { asUser, admin, bearerToken, missingSupabaseEnv } from '@/lib/supabase/server';
 import { loadCollection } from '@/lib/portfolio';
+import { cardsByIds } from '@/lib/tcgapi';
 import { computeCollectionScore, achievements } from '@/lib/score';
 
 /**
@@ -60,13 +61,13 @@ export async function GET(req: Request) {
   // that needed the catalog. Rule 2 is satisfied by saying prices are
   // unavailable, not by hiding everything.
   const sb = admin();
-  const result = await loadCollection(db, sb);
+  const result = await loadCollection(db, sb, cardsByIds);
   if ('error' in result) {
     return NextResponse.json(
       { error: { message: result.error, code: result.code } }, { status: result.status },
     );
   }
-  const { items, totals } = result;
+  const { items, totals, priceProblem } = result;
 
   const { data: userRes } = await db.auth.getUser();
   const userId = userRes?.user?.id;
@@ -155,7 +156,10 @@ export async function GET(req: Request) {
     // True when today's value could not be established, so the page can say so
     // rather than presenting an unpriced total as a real one.
     valuationUnavailable: totals.cards > 0 && totals.valued === 0,
-    pricesUnavailable: sb ? null : (missingSupabaseEnv().join(' and ') || 'the card catalog is unreachable'),
+    // Non-null ONLY when a card actually went unpriced, and then it says why.
+    // Previously this reported the missing server key even when every card had
+    // a price, which is a banner that cries wolf.
+    pricesUnavailable: priceProblem,
     series,
     recorded,
     // Top holdings by total value, for the "what is actually carrying this

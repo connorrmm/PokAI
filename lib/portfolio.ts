@@ -7,6 +7,33 @@ import 'server-only';
  * list it is supposedly the sum of.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ApiCard } from './scanner/types';
+
+/**
+ * Looks cards up with the provider when our own catalog cannot price them.
+ *
+ * Injected rather than imported so this module stays testable against a fake:
+ * the interesting cases are "cache has it", "cache does not and the provider
+ * does", and "neither", and only the first is reachable without one.
+ */
+export interface CardRef {
+  id: number;
+  /** What the user's own collection row remembers, for the search fallback. */
+  name?: string | null;
+  number?: string | null;
+}
+
+export type LiveLookup = (refs: CardRef[]) => Promise<{ cards: ApiCard[]; errors: string[] }>;
+
+/**
+ * The most cards we will ask the provider about in one page load.
+ *
+ * A backfill is meant to cover the gap left by a cache that was never written,
+ * not to become the way prices are fetched. Anything past this is left
+ * unpriced and SAID to be unpriced, which is honest and bounded; the nightly
+ * sync is what is supposed to close a gap this size.
+ */
+const LIVE_LOOKUP_CAP = 25;
 
 export interface CollectionItem {
   id: number;
@@ -38,7 +65,11 @@ export interface Totals {
 export async function loadCollection(
   db: SupabaseClient,
   sb: SupabaseClient | null,
-): Promise<{ items: CollectionItem[]; totals: Totals } | { error: string; code?: string; status: number }> {
+  lookup?: LiveLookup,
+): Promise<
+  | { items: CollectionItem[]; totals: Totals; priceProblem: string | null }
+  | { error: string; code?: string; status: number }
+> {
   const { data, error } = await db
     .from('collections')
     .select('id, card_id, quantity, condition, notes, created_at, card_name, card_set_name, card_number')
@@ -52,6 +83,11 @@ export async function loadCollection(
   const rows = data ?? [];
   const ids = rows.map((r) => r.card_id).filter((v): v is number => typeof v === 'number');
   const live = new Map<number, { imageUrl: string | null; rarity: string | null; marketPrice: number | null }>();
+  const problems: string[] = [];
+
+  if (ids.length && !sb) {
+    problems.push('the card catalog is unreadable (SUPABASE_SERVICE_ROLE_KEY missing or unreadable)');
+  }
 
   if (ids.length && sb) {
     const [cardRes, priceRes] = await Promise.all([
@@ -61,8 +97,14 @@ export async function loadCollection(
     // Discarding these turned a broken service-role read into "Value
     // unavailable" on every card and a $0.00 portfolio, served with a 200 and
     // nothing logged anywhere. Rule 4: a failure must say what it was.
-    if (cardRes.error) console.warn('Catalog read failed:', cardRes.error.message);
-    if (priceRes.error) console.warn('Price read failed:', priceRes.error.message);
+    if (cardRes.error) {
+      console.warn('Catalog read failed:', cardRes.error.message);
+      problems.push(`catalog read failed: ${cardRes.error.message}`);
+    }
+    if (priceRes.error) {
+      console.warn('Price read failed:', priceRes.error.message);
+      problems.push(`price read failed: ${priceRes.error.message}`);
+    }
     const cardRows = cardRes.data;
     const priceRows = priceRes.data;
     const priceOf = new Map<number, number | null>();
@@ -75,6 +117,50 @@ export async function loadCollection(
         rarity: c.rarity ?? null,
         marketPrice: priceOf.get(c.id) ?? null,
       });
+    }
+  }
+
+  /**
+   * Anything our own catalog could not put a price on, asked of the provider.
+   *
+   * This is the difference between a portfolio that works and one that waits:
+   * a card only lands in the cache when someone searches for it, so a card
+   * saved before the cache could be written stays unpriced forever otherwise.
+   * The price used here is the provider's current one, not a remembered figure
+   * -- rule 2 forbids presenting a stale number as today's.
+   */
+  if (lookup) {
+    const unpriced = rows
+      .filter((r) => typeof r.card_id === 'number'
+        && typeof live.get(r.card_id)?.marketPrice !== 'number')
+      .map((r) => ({ id: r.card_id as number, name: r.card_name, number: r.card_number }))
+      .filter((ref, i, all) => all.findIndex((o) => o.id === ref.id) === i);
+    if (unpriced.length) {
+      const asked = unpriced.slice(0, LIVE_LOOKUP_CAP);
+      try {
+        const { cards, errors } = await lookup(asked);
+        for (const c of cards) {
+          const id = Number(c.id);
+          if (!Number.isFinite(id)) continue;
+          const had = live.get(id);
+          live.set(id, {
+            // The cached row wins on art and rarity when it has them; the
+            // provider is only being consulted about the price.
+            imageUrl: had?.imageUrl ?? c.imageUrl ?? null,
+            rarity: had?.rarity ?? c.rarity ?? null,
+            marketPrice: typeof c.marketPrice === 'number' ? c.marketPrice : (had?.marketPrice ?? null),
+          });
+        }
+        problems.push(...errors);
+      } catch (e) {
+        problems.push(e instanceof Error ? e.message : String(e));
+      }
+      if (unpriced.length > asked.length) {
+        problems.push(
+          `${unpriced.length - asked.length} more card(s) were left unpriced this load `
+          + `(at most ${LIVE_LOOKUP_CAP} are looked up live)`,
+        );
+      }
     }
   }
 
@@ -98,7 +184,17 @@ export async function loadCollection(
     };
   });
 
-  return { items, totals: totalsOf(items) };
+  const totals = totalsOf(items);
+
+  // Only a problem if it actually cost someone a price. The catalog being
+  // unreadable while the provider answered is a cache miss, not a failure the
+  // user needs to read about -- reporting it anyway is the false alarm that
+  // trains people to ignore the banner.
+  const priceProblem = totals.unpriced > 0 && problems.length
+    ? [...new Set(problems)].join('; ')
+    : null;
+
+  return { items, totals, priceProblem };
 }
 
 export function totalsOf(items: CollectionItem[]): Totals {

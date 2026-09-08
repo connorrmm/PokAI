@@ -127,8 +127,8 @@ export default function PortfolioView({ data, isAnonymous = false }: {
           // Rule 2 and rule 4 together: say the total is not a valuation, and
           // say exactly why, rather than showing $0.00 or an empty page.
           <div style={{ fontSize: 12, marginTop: 4, color: 'var(--gold)' }}>
-            Prices unavailable — the server is missing {data.pricesUnavailable}.
-            Your cards are all here; only their values are missing.
+            Some prices are unavailable, so this total covers only the cards we could
+            value. Reason: {data.pricesUnavailable}
           </div>
         ) : data.valuationUnavailable ? (
           // Rule 2: an unpriced total is not a valuation. Never dress one up

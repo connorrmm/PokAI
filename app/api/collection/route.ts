@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { asUser, admin, bearerToken, missingSupabaseEnv } from '@/lib/supabase/server';
 import { loadCollection } from '@/lib/portfolio';
+import { cardsByIds } from '@/lib/tcgapi';
 import { parseCondition } from '@/lib/condition';
 
 /**
@@ -59,7 +60,7 @@ export async function GET(req: Request) {
   // that needed the catalog. Rule 2 is satisfied by saying prices are
   // unavailable, not by hiding everything.
   const sb = admin();
-  const result = await loadCollection(db, sb);
+  const result = await loadCollection(db, sb, cardsByIds);
   if ('error' in result) {
     // Rule 4: the real reason. An expired token and a broken policy are very
     // different problems and only the message tells them apart.
@@ -71,7 +72,8 @@ export async function GET(req: Request) {
     ...result,
     // Named so the UI can explain a priceless collection rather than
     // presenting it as a worthless one.
-    pricesUnavailable: sb ? null : missingSupabaseEnv().join(' and ') || 'the card catalog is unreachable',
+    // Non-null ONLY when a card actually went unpriced, and then it says why.
+    pricesUnavailable: result.priceProblem,
   });
 }
 

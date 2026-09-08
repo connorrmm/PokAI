@@ -88,8 +88,8 @@ export default function Collection() {
           border: '1px solid rgba(255,176,32,0.28)', borderRadius: 12, padding: '10px 12px',
           marginTop: 0,
         }}>
-          Prices unavailable — the server is missing {pricesUnavailable}. Your cards are
-          all here; only their values are missing.
+          Some prices are unavailable. Your cards are all here; only their values are
+          missing. Reason: {pricesUnavailable}
         </p>
       )}
 

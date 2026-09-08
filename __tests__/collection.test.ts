@@ -174,3 +174,140 @@ describe('loadCollection', () => {
     expect(sb.seen).toEqual([]);
   });
 });
+
+/**
+ * Pricing a card our own catalog has never heard of.
+ *
+ * On 2026-09-08 the live database held three saved cards and ZERO catalog
+ * rows, so the portfolio listed every card with no value against it. Nothing
+ * was broken by the letter of the rules -- rule 2 forbids inventing a price,
+ * and it did not invent one -- but the cache is only ever filled by a search,
+ * so a card saved before the cache could be written would have stayed
+ * priceless forever. The catalog had to stop being a precondition for a price.
+ */
+describe('pricing a card the catalog does not have', () => {
+  const rowsWithOneCard = {
+    collections: {
+      data: [{
+        id: 1, card_id: 21876, quantity: 1, condition: null, notes: null,
+        created_at: '2026-09-08T14:26:16Z', card_name: 'Kangaskhan ex',
+        card_set_name: 'SV: Scarlet & Violet 151', card_number: '190/165',
+      }],
+    },
+    cards: { data: [] },
+    card_prices_latest: { data: [] },
+  };
+
+  it('asks the provider, and uses the price it gets back', async () => {
+    const asked: number[][] = [];
+    const result = await loadCollection(
+      fakeDb(rowsWithOneCard) as never,
+      fakeDb(rowsWithOneCard) as never,
+      async (refs) => {
+        asked.push(refs.map((r) => r.id));
+        // The name the collection row remembers is passed through, so the
+        // search fallback has something to search for.
+        expect(refs[0].name).toBe('Kangaskhan ex');
+        expect(refs[0].number).toBe('190/165');
+        return { cards: [{ id: 21876, name: 'Kangaskhan ex', marketPrice: 41.2 }], errors: [] };
+      },
+    );
+    if ('error' in result) throw new Error(result.error);
+    expect(asked).toEqual([[21876]]);
+    expect(result.items[0].marketPrice).toBe(41.2);
+    expect(result.totals.marketValue).toBe(41.2);
+    expect(result.totals.unpriced).toBe(0);
+    // Nothing went unpriced, so there is nothing to warn about.
+    expect(result.priceProblem).toBeNull();
+  });
+
+  it('does not ask about a card the catalog already priced', async () => {
+    const asked: number[][] = [];
+    const result = await loadCollection(
+      fakeDb(rowsWithOneCard) as never,
+      fakeDb({
+        cards: { data: [{ id: 21876, image_url: 'art.jpg', rarity: 'Secret Rare' }] },
+        card_prices_latest: { data: [{ card_id: 21876, market_price: 39 }] },
+      }) as never,
+      async (refs) => { asked.push(refs.map((r) => r.id)); return { cards: [], errors: [] }; },
+    );
+    if ('error' in result) throw new Error(result.error);
+    // The cache exists to avoid this call. Making it anyway would spend the
+    // provider's quota on every page load for no new information.
+    expect(asked).toEqual([]);
+    expect(result.items[0].marketPrice).toBe(39);
+  });
+
+  it('says why, rather than inventing a price, when the provider fails too', async () => {
+    const result = await loadCollection(
+      fakeDb(rowsWithOneCard) as never,
+      fakeDb(rowsWithOneCard) as never,
+      async () => ({ cards: [], errors: ['card 21876: card database returned 503'] }),
+    );
+    if ('error' in result) throw new Error(result.error);
+    expect(result.items[0].marketPrice).toBeNull();
+    expect(result.totals.marketValue).toBe(0);
+    expect(result.totals.unpriced).toBe(1);
+    // Rule 4: the banner has to carry the real reason, not "unavailable".
+    expect(result.priceProblem).toContain('503');
+  });
+
+  it('survives the provider throwing, and still returns the collection', async () => {
+    const result = await loadCollection(
+      fakeDb(rowsWithOneCard) as never,
+      fakeDb(rowsWithOneCard) as never,
+      async () => { throw new Error('TCGAPI_KEY is not set in the server environment'); },
+    );
+    if ('error' in result) throw new Error(result.error);
+    // The cards are the user's own rows. A provider outage may cost a price;
+    // it must never cost someone their collection.
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].name).toBe('Kangaskhan ex');
+    expect(result.priceProblem).toContain('TCGAPI_KEY');
+  });
+
+  it('keeps the cached art and rarity, taking only the price from the provider', async () => {
+    const result = await loadCollection(
+      fakeDb(rowsWithOneCard) as never,
+      fakeDb({
+        cards: { data: [{ id: 21876, image_url: 'cached-art.jpg', rarity: 'Secret Rare' }] },
+        card_prices_latest: { data: [] },
+      }) as never,
+      async () => ({
+        cards: [{ id: 21876, name: 'Kangaskhan ex', imageUrl: 'other.jpg', rarity: 'Rare', marketPrice: 41.2 }],
+        errors: [],
+      }),
+    );
+    if ('error' in result) throw new Error(result.error);
+    expect(result.items[0].imageUrl).toBe('cached-art.jpg');
+    expect(result.items[0].rarity).toBe('Secret Rare');
+    expect(result.items[0].marketPrice).toBe(41.2);
+  });
+
+  it('works with no catalog client at all', async () => {
+    // A missing service-role key stops the cache being read or written. It
+    // must not stop a collection being valued.
+    const result = await loadCollection(
+      fakeDb(rowsWithOneCard) as never,
+      null,
+      async () => ({ cards: [{ id: 21876, name: 'Kangaskhan ex', marketPrice: 41.2 }], errors: [] }),
+    );
+    if ('error' in result) throw new Error(result.error);
+    expect(result.items[0].marketPrice).toBe(41.2);
+    expect(result.priceProblem).toBeNull();
+  });
+
+  it('never prices a card with another card\'s answer', async () => {
+    // The provider is asked by id and answers by id. If those ever drift, the
+    // failure is a confidently wrong valuation -- the exact class of bug the
+    // scanner already cost us days over.
+    const result = await loadCollection(
+      fakeDb(rowsWithOneCard) as never,
+      null,
+      async () => ({ cards: [{ id: 99999, name: 'Some Other Card', marketPrice: 900 }], errors: [] }),
+    );
+    if ('error' in result) throw new Error(result.error);
+    expect(result.items[0].marketPrice).toBeNull();
+    expect(result.totals.marketValue).toBe(0);
+  });
+});
