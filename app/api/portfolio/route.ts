@@ -144,6 +144,11 @@ export async function GET(req: Request) {
     }),
     // "Recent pulls" in the prototype: the cards most recently added.
     recent: items.slice(0, 8),
+    // Every holding, for the rarity breakdown -- it has to cover the whole
+    // collection, not just the eight most recent, or the proportions lie.
+    all: items.map((i) => ({
+      rarity: i.rarity, quantity: i.quantity, marketPrice: i.marketPrice,
+    })),
     // True when today's value could not be established, so the page can say so
     // rather than presenting an unpriced total as a real one.
     valuationUnavailable: totals.cards > 0 && totals.valued === 0,

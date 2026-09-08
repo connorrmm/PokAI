@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Auth, { useSession } from './Auth';
 import Sparkline, { type Point } from './Sparkline';
 import KeepCollection from './KeepCollection';
+import Composition from './Composition';
 import type { Score, Achievement } from '@/lib/score';
 import { tierOf, TIER_LABEL, TIER_COLOUR } from '@/lib/tier';
 
@@ -55,6 +56,8 @@ interface Data {
   series: Point[];
   top: Holding[];
   recent: Holding[];
+  /** Every holding, trimmed to what the rarity breakdown needs. */
+  all: Array<{ rarity: string | null; quantity: number; marketPrice: number | null }>;
   score: Score;
   achievements: Achievement[];
   itemCount: number;
@@ -189,7 +192,8 @@ export default function Portfolio({ active = true }: { active?: boolean }) {
           </div>
         ) : (
           <div style={{ fontSize: 12, marginTop: 4, color: 'var(--muted)' }}>
-            No change to show yet — this is the first day recorded.
+            Tracking from today — the change appears once there is a second day
+            to compare against.
           </div>
         )}
 
@@ -265,14 +269,25 @@ export default function Portfolio({ active = true }: { active?: boolean }) {
         </>
       )}
 
+      <Composition holdings={data.all ?? data.recent} />
+
       {/* The other half of signing people in anonymously: a way out of it,
           offered once there is something worth keeping. */}
       {isAnonymous && <KeepCollection cardCount={data.totals.cards} />}
 
       {data.totals.cards === 0 && (
-        <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 18 }}>
-          Nothing here yet. <a href="/">Scan a card</a> and add it to your collection.
-        </p>
+        <div style={{
+          marginTop: 18, padding: 18, borderRadius: 16, textAlign: 'center',
+          background: 'var(--panel)', border: '1px dashed var(--border)',
+        }}>
+          <div className="display" style={{ fontSize: 14, fontWeight: 600 }}>
+            No cards yet
+          </div>
+          <p style={{ color: 'var(--muted)', fontSize: 12.5, margin: '6px 0 0' }}>
+            Scan a card and tap “Add to my collection”. Its value, rarity and set
+            all arrive with it, and this page starts tracking from that moment.
+          </p>
+        </div>
       )}
     </div>
   );
