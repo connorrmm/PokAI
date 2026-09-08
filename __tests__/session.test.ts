@@ -134,3 +134,67 @@ describe('ensureSession across module copies', () => {
     }
   });
 });
+
+/**
+ * The cross-tab lock.
+ *
+ * The page-scoped promise stops components on ONE page racing. It cannot stop
+ * two tabs, or a reload that starts before the previous page wrote its session
+ * to storage -- and production showed accounts still being created in pairs
+ * milliseconds apart after the page fix. Both readings of that (a broken lock,
+ * or a lost session) are closed by serialising the one irreversible step.
+ */
+describe('account creation is serialised across tabs', () => {
+  // globalThis.navigator is read-only in Node, so it is stubbed rather than
+  // assigned. window has to exist too: the page-scoped lock reads it.
+  function withNavigator(locks: unknown) {
+    vi.stubGlobal('window', {});
+    vi.stubGlobal('navigator', locks === undefined ? {} : { locks });
+    return () => vi.unstubAllGlobals();
+  }
+
+  it('takes the lock before creating an account', async () => {
+    const taken: string[] = [];
+    const restore = withNavigator({
+      request: async (name: string, fn: () => Promise<unknown>) => { taken.push(name); return fn(); },
+    });
+    try {
+      vi.resetModules();
+      const { ensureSession } = await import('@/components/Auth');
+      const sb = fakeClient();
+      await ensureSession(sb as never);
+      expect(taken).toEqual(['pokai-anonymous-sign-in']);
+      expect(sb.signIns()).toBe(1);
+    } finally { restore(); }
+  });
+
+  it('does not take the lock when a session already exists', async () => {
+    // Waiting on a lock we do not need would make every page load slower for
+    // the common case, which is a returning visitor.
+    const taken: string[] = [];
+    const restore = withNavigator({
+      request: async (name: string, fn: () => Promise<unknown>) => { taken.push(name); return fn(); },
+    });
+    try {
+      vi.resetModules();
+      const { ensureSession } = await import('@/components/Auth');
+      const sb = fakeClient({ stored: { access_token: 'existing' } });
+      await ensureSession(sb as never);
+      expect(taken).toEqual([]);
+      expect(sb.signIns()).toBe(0);
+    } finally { restore(); }
+  });
+
+  it('still signs in on a browser with no Web Locks', async () => {
+    // Older Safari. An unlocked attempt is exactly what we had before, so the
+    // fallback can only ever be an improvement, never a regression.
+    const restore = withNavigator(undefined);
+    try {
+      vi.resetModules();
+      const { ensureSession } = await import('@/components/Auth');
+      const sb = fakeClient();
+      await expect(ensureSession(sb as never)).resolves.toBeTruthy();
+      expect(sb.signIns()).toBe(1);
+    } finally { restore(); }
+  });
+});
