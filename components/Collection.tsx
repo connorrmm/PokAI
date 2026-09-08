@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import Auth, { useSession } from './Auth';
+import Account from './Account';
+import { useSession } from './Auth';
 
 interface Item {
   id: number;
@@ -22,7 +23,7 @@ function money(n: number): string {
 }
 
 export default function Collection() {
-  const { session, ready, signOut } = useSession();
+  const { session, ready, signOut, isAnonymous, email } = useSession();
   const [items, setItems] = useState<Item[] | null>(null);
   const [totals, setTotals] = useState<Totals | null>(null);
   const [pricesUnavailable, setPricesUnavailable] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export default function Collection() {
         <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 0 }}>
           Sign in to keep the cards you scan. Your collection is yours — nobody else can read it.
         </p>
-        <Auth />
+        <Account isAnonymous={false} />
       </div>
     );
   }
@@ -135,10 +136,31 @@ export default function Collection() {
         </div>
       ))}
 
-      <button onClick={signOut} className="btn-ghost"
-              style={{ width: '100%', padding: 12, marginTop: 20, fontSize: 13, cursor: 'pointer' }}>
-        Sign out
-      </button>
+      {/* Who this collection belongs to. An anonymous session says so plainly:
+          "signed in" when there is no account to sign back into is the kind of
+          quiet reassurance that costs someone their cards. */}
+      <div style={{
+        marginTop: 20, padding: '12px 14px', borderRadius: 14,
+        background: 'var(--panel)', border: '1px solid var(--border)',
+      }}>
+        {email ? (
+          <>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>Signed in as</div>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{email}</div>
+            <button onClick={signOut} className="btn-ghost"
+                    style={{ width: '100%', padding: 11, marginTop: 10, fontSize: 13, cursor: 'pointer' }}>
+              Sign out
+            </button>
+          </>
+        ) : (
+          <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+            {isAnonymous
+              ? 'This collection is saved to this browser only. Add an email and password '
+                + 'on the Portfolio tab to keep it.'
+              : 'No account is attached to this collection yet.'}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

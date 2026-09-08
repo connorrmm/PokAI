@@ -14,7 +14,7 @@ import type { ApiCard } from '@/lib/scanner/types';
 import type { CardRead } from '@/lib/scanner/vision-types';
 import { logScan } from '@/lib/scan-log';
 import { useSession } from './Auth';
-import Auth from './Auth';
+import Account from './Account';
 
 export default function AddToCollection({
   card, predicted, read, confidence, candidateCount, autoAccepted = false,
@@ -103,7 +103,7 @@ export default function AddToCollection({
         <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 0 }}>
           Sign in to keep this card. No password — we email you a link.
         </p>
-        <Auth />
+        <Account isAnonymous={false} />
       </div>
     );
   }

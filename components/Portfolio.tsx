@@ -7,7 +7,8 @@
  * the product and then misrepresents it.
  */
 import { useCallback, useEffect, useState } from 'react';
-import Auth, { useSession } from './Auth';
+import { useSession } from './Auth';
+import Account from './Account';
 import PortfolioView, { type Data } from './PortfolioView';
 
 export default function Portfolio({ active = true }: { active?: boolean }) {
@@ -55,7 +56,7 @@ export default function Portfolio({ active = true }: { active?: boolean }) {
         <p style={{ fontSize: 13, color: 'var(--muted)' }}>
           Sign in to see what your collection is worth.
         </p>
-        <Auth />
+        <Account isAnonymous={false} />
       </div>
     );
   }

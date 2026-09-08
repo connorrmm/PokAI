@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import Auth, { useSession } from './Auth';
+import { useSession } from './Auth';
+import Account from './Account';
 
 interface Row {
   id: number; at: string; confidence: number | null; autoAccepted: boolean;
@@ -49,7 +50,7 @@ export default function History() {
         <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 0 }}>
           Sign in to keep a record of what you have scanned.
         </p>
-        <Auth />
+        <Account isAnonymous={false} />
       </div>
     );
   }
