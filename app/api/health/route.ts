@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { missingSupabaseEnv, envSources, serviceRoleCheck } from '@/lib/supabase/server';
+import { buildInfo } from '@/lib/build';
 
 /**
  * Liveness check that also reports server configuration.
@@ -91,6 +92,9 @@ export async function GET() {
   return NextResponse.json({
     ok: missingRequired.length === 0,
     time: new Date().toISOString(),
+    // Which commit is answering. Without this, every report of a stale error
+    // turns into an argument about whether the fix is deployed.
+    build: buildInfo(),
     summary: missingRequired.length === 0
       ? 'All required configuration is present.'
       : `Missing required configuration: ${missingRequired.join(', ')}. Set it in Vercel > Settings > Environment Variables, then redeploy.`,

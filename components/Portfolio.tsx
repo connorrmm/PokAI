@@ -21,7 +21,14 @@ export default function Portfolio({ active = true }: { active?: boolean }) {
     try {
       const res = await fetch('/api/portfolio', { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
-      if (!res.ok) { setError(json?.error?.message || `Could not load your portfolio (${res.status})`); return; }
+      if (!res.ok) {
+        // Keep the build stamp the server attached. A screenshot of an error
+        // that cannot be dated is a screenshot that has to be argued about.
+        const b = json?.error?.build?.commit;
+        const msg = json?.error?.message || `Could not load your portfolio (${res.status})`;
+        setError(b && !msg.includes(b) ? `${msg} (build ${b})` : msg);
+        return;
+      }
       setData(json);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
