@@ -131,3 +131,90 @@ describe('cardsByIds', () => {
     expect(errors).toEqual([]);
   });
 });
+
+/**
+ * The two search attempts, and saying which of four failures happened.
+ *
+ * Sterling's Froakie came back "the card database has no current price for
+ * Froakie 088/086" -- which is one sentence covering four completely different
+ * problems: the query found nothing, it found other cards but not this one,
+ * it found this card with no price, or the request itself failed. Those have
+ * four different fixes and only the message tells them apart (rule 4).
+ */
+describe('cardsByIds search attempts', () => {
+  const FROAKIE = { id: 2153348, name: 'Froakie - 088/086', number: '088/086' };
+  const json = (body: unknown) => ({
+    ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body),
+  }) as unknown as Response;
+
+  let realFetch: typeof globalThis.fetch;
+  let realKey: string | undefined;
+  beforeEach(() => {
+    realFetch = globalThis.fetch;
+    realKey = process.env.TCGAPI_KEY;
+    process.env.TCGAPI_KEY = 'test-key';
+  });
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    if (realKey === undefined) delete process.env.TCGAPI_KEY;
+    else process.env.TCGAPI_KEY = realKey;
+  });
+
+  it('retries with the name alone when name-and-number finds nothing', async () => {
+    // A collector number is not obviously a search term. A provider that
+    // treats "088/086" as one more word to match returns nothing at all.
+    const queries: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      const u = String(url);
+      if (u.includes('/cards/')) return json({ id: 2153348, name: 'Froakie' });
+      const q = decodeURIComponent(u.split('q=')[1].split('&')[0]);
+      queries.push(q);
+      if (q.includes('088')) return json({ data: [] });
+      return json({ data: [{ id: 2153348, name: 'Froakie', number: '088/086', market_price: 7.43 }] });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { cardsByIds } = await import('../lib/tcgapi');
+    const { cards, errors } = await cardsByIds([FROAKIE]);
+
+    expect(queries).toEqual(['Froakie 088/086', 'Froakie']);
+    expect(cards[0].marketPrice).toBe(7.43);
+    expect(errors).toEqual([]);
+  });
+
+  it('distinguishes a card with no price from a card not found', async () => {
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).includes('/cards/')) return json({ id: 2153348, name: 'Froakie' });
+      // The provider knows the card. It has no market price for it -- a card
+      // too new or too thinly traded to have one, which is a real answer.
+      return json({ data: [{ id: 2153348, name: 'Froakie', number: '088/086' }] });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { cardsByIds } = await import('../lib/tcgapi');
+    const { errors } = await cardsByIds([FROAKIE]);
+    expect(errors.join(' ')).toContain('no market price');
+  });
+
+  it('says when the search found other cards but not this one', async () => {
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).includes('/cards/')) return json({ id: 2153348, name: 'Froakie' });
+      return json({ data: [{ id: 999, name: 'Froakie', number: '057/162', market_price: 0.12 }] });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { cardsByIds } = await import('../lib/tcgapi');
+    const { cards, errors } = await cardsByIds([FROAKIE]);
+    expect(errors.join(' ')).toContain('none of them this one');
+    // And emphatically not the twelve-cent Froakie.
+    expect(cards.every((c) => typeof c.marketPrice !== 'number')).toBe(true);
+  });
+
+  it('says when the search returned nothing at all', async () => {
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).includes('/cards/')) return json({ id: 2153348, name: 'Froakie' });
+      return json({ data: [] });
+    }) as unknown as typeof globalThis.fetch;
+
+    const { cardsByIds } = await import('../lib/tcgapi');
+    const { errors } = await cardsByIds([FROAKIE]);
+    expect(errors.join(' ')).toContain('returned nothing at all');
+  });
+});

@@ -200,34 +200,80 @@ export async function cardsByIds(refs: CardRef[]): Promise<{ cards: ApiCard[]; e
 
   for (const id of unique.filter((id) => !priced(id))) {
     const ref = byId.get(id);
-    const query = searchTermFor(ref);
-    if (!query) {
+    /**
+     * Two attempts, name-and-number then name alone.
+     *
+     * Which one works is not something we can know from here -- this sandbox
+     * cannot reach the host -- and they fail in opposite directions. "Froakie
+     * 088/086" is precise but a collector number is not obviously a search
+     * term, and a provider that treats it as one more word to match will
+     * return nothing at all. "Froakie" always matches but buries the right
+     * print among every other Froakie, which the limit may cut off.
+     *
+     * Trying both costs one extra request on a card we would otherwise have
+     * failed to price, and it is the id match that keeps either answer safe.
+     */
+    const attempts = [searchTermFor(ref), searchTermFor({ name: ref?.name, number: null })]
+      .filter((q, i, all): q is string => Boolean(q) && all.indexOf(q) === i);
+
+    if (!attempts.length) {
       errors.push(`card ${id}: no price, and no name to search by`);
       continue;
     }
-    try {
-      const res = await fetchWithRetry(
-        `${BASE}/search?q=${encodeURIComponent(query)}&game=pokemon&limit=100`,
-      );
-      const json = (await res.json()) as { data?: TcgApiCard[] };
-      const found = (Array.isArray(json.data) ? json.data : []).find(
-        (c) => c.id === id && typeof c.market_price === 'number',
-      );
-      if (found) {
-        // Replace the priceless version from the direct lookup rather than
-        // adding a second entry for the same card.
-        const at = cards.findIndex((c) => Number(c.id) === id);
-        if (at >= 0) cards[at] = normaliseCard(found);
-        else cards.push(normaliseCard(found));
-        // Drop the by-id complaint: we have the price, so it is not a failure
-        // the user needs to read about.
-        const i = errors.findIndex((e) => e.startsWith(`card ${id}:`));
-        if (i >= 0) errors.splice(i, 1);
-      } else if (!errors.some((e) => e.startsWith(`card ${id}:`))) {
-        errors.push(`card ${id}: the card database has no current price for "${query}"`);
+
+    let hits = 0;
+    let seenUnpriced = false;
+    let failure: string | null = null;
+
+    for (const query of attempts) {
+      try {
+        const res = await fetchWithRetry(
+          `${BASE}/search?q=${encodeURIComponent(query)}&game=pokemon&limit=100`,
+        );
+        const json = (await res.json()) as { data?: TcgApiCard[] };
+        const all = Array.isArray(json.data) ? json.data : [];
+        hits += all.length;
+        const match = all.find((c) => c.id === id);
+        if (match && typeof match.market_price === 'number') {
+          // Replace the priceless version from the direct lookup rather than
+          // adding a second entry for the same card.
+          const at = cards.findIndex((c) => Number(c.id) === id);
+          if (at >= 0) cards[at] = normaliseCard(match);
+          else cards.push(normaliseCard(match));
+          failure = null;
+          break;
+        }
+        if (match) seenUnpriced = true;
+      } catch (e) {
+        failure = `card ${id} (search for "${query}"): ${e instanceof Error ? e.message : String(e)}`;
       }
-    } catch (e) {
-      errors.push(`card ${id} (search fallback): ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    if (priced(id)) {
+      // We have the price. The by-id complaint is no longer something the user
+      // needs to read about.
+      const i = errors.findIndex((e) => e.startsWith(`card ${id}:`));
+      if (i >= 0) errors.splice(i, 1);
+      continue;
+    }
+
+    // Rule 4, and the reason this is spelled out rather than collapsed into
+    // "unavailable": these four are four different problems with four
+    // different fixes, and from the outside they look identical.
+    if (failure) {
+      errors.push(failure);
+    } else if (seenUnpriced) {
+      errors.push(
+        `card ${id} (${attempts[0]}): the card database knows this card but lists `
+        + 'no market price for it -- usually a card too new or too thinly traded to have one',
+      );
+    } else if (hits === 0) {
+      errors.push(`card ${id}: searching for "${attempts.join('" and "')}" returned nothing at all`);
+    } else {
+      errors.push(
+        `card ${id}: searching for "${attempts.join('" and "')}" returned ${hits} card(s), `
+        + 'none of them this one',
+      );
     }
   }
 

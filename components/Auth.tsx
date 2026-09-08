@@ -12,6 +12,70 @@ import type { Session } from '@supabase/supabase-js';
 import { supabaseBrowser, SUPABASE_NOT_CONFIGURED } from '@/lib/supabase/browser';
 import { captchaToken } from '@/lib/captcha';
 
+/**
+ * The ONE anonymous sign-in, shared by every component that needs a session.
+ *
+ * WHY THIS IS A MODULE-LEVEL SINGLETON. Five components call useSession()
+ * independently -- Scanner, AddToCollection, Portfolio, Collection, History --
+ * and several of them mount together. Each ran this effect, each found no
+ * stored session, and each created its own anonymous account. Last one to
+ * finish won the browser's storage; the rest became accounts nobody could sign
+ * back into.
+ *
+ * That is not a cosmetic race. Row-level security is doing its job, so a card
+ * saved with the losing account's token is that account's card, and it is
+ * simply gone from the user's view. Sterling's live database on 2026-09-08 had
+ * THREE anonymous users created inside thirty minutes with his cards split
+ * across them -- three cards under one, one under another -- and the app showed
+ * him "1 card" while the first three sat there unreachable.
+ *
+ * A promise, not a boolean: the window that matters is between starting the
+ * sign-in and finishing it, which is exactly when a flag has not been set yet.
+ * Everyone awaits the same promise, so there is exactly one sign-in.
+ */
+let bootstrap: Promise<Session | null> | null = null;
+
+export function ensureSession(sb: NonNullable<ReturnType<typeof supabaseBrowser>>): Promise<Session | null> {
+  if (bootstrap) return bootstrap;
+  bootstrap = (async () => {
+    const { data } = await sb.auth.getSession();
+    if (data.session) return data.session;
+
+    // No session: make one WITHOUT asking for anything.
+    //
+    // Sterling: "instead of needing to send an email to yourself, people
+    // just want to see it when they pull up the app." An anonymous account
+    // is a real account -- row-level security applies to it exactly as to
+    // any other, so a collection is private from the first scan -- it just
+    // has no email attached yet. Adding an email later keeps the same
+    // account and carries the collection to other devices.
+    //
+    // The alternative was storing collections in the browser, which loses
+    // everything the moment someone clears their data. A collection that
+    // can evaporate is worse than one that needs an account.
+    // Supabase applies CAPTCHA protection to sign-ins, anonymous ones
+    // included. Resolves null until a sitekey is configured, so this is a
+    // no-op today and correct the moment one is added.
+    const token = await captchaToken();
+    const { data: anon, error } = await sb.auth.signInAnonymously(
+      token ? { options: { captchaToken: token } } : undefined,
+    );
+    if (error) {
+      // Rule 4: pass the real reason through. "Anonymous sign-ins are
+      // disabled" is a switch in the Supabase dashboard, and no amount of
+      // retrying fixes it -- but the message names it exactly.
+      throw error;
+    }
+    return anon.session;
+  })();
+
+  // Clear on failure so a later mount can try again. Keeping a rejected
+  // promise would mean one bad moment at startup left the app permanently
+  // unable to sign anyone in.
+  bootstrap.catch(() => { bootstrap = null; });
+  return bootstrap;
+}
+
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
@@ -21,53 +85,31 @@ export function useSession() {
     const sb = supabaseBrowser();
     if (!sb) { setReady(true); return; }
     let alive = true;
-    sb.auth.getSession()
-      .then(async ({ data }) => {
-        if (!alive) return;
-        if (data.session) { setSession(data.session); return; }
-
-        // No session: make one WITHOUT asking for anything.
-        //
-        // Sterling: "instead of needing to send an email to yourself, people
-        // just want to see it when they pull up the app." An anonymous account
-        // is a real account -- row-level security applies to it exactly as to
-        // any other, so a collection is private from the first scan -- it just
-        // has no email attached yet. Adding an email later keeps the same
-        // account and carries the collection to other devices.
-        //
-        // The alternative was storing collections in the browser, which loses
-        // everything the moment someone clears their data. A collection that
-        // can evaporate is worse than one that needs an account.
-        // Supabase applies CAPTCHA protection to sign-ins, anonymous ones
-        // included. Resolves null until a sitekey is configured, so this is a
-        // no-op today and correct the moment one is added.
-        const token = await captchaToken();
-        const { data: anon, error } = await sb.auth.signInAnonymously(
-          token ? { options: { captchaToken: token } } : undefined,
-        );
-        if (!alive) return;
-        if (error) {
-          // Rule 4: pass the real reason through. "Anonymous sign-ins are
-          // disabled" is a switch in the Supabase dashboard, and no amount of
-          // retrying fixes it -- but the message names it exactly.
-          setSignInError(error.message);
-          return;
-        }
-        setSession(anon.session);
-      })
+    ensureSession(sb)
+      .then((s) => { if (alive) setSession(s); })
       .catch((e: unknown) => {
+        if (!alive) return;
         // A rejection here (a navigator-lock timeout, storage blocked by
-        // private browsing) used to leave `ready` false forever, so
-        // AddToCollection rendered null and the save button simply never
-        // appeared -- with nothing on screen to explain why.
-        console.warn('Could not read the saved session:', e);
+        // private browsing, anonymous sign-ins switched off) used to leave
+        // `ready` false forever, so AddToCollection rendered null and the save
+        // button simply never appeared -- with nothing on screen to say why.
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn('Could not establish a session:', msg);
+        setSignInError(msg);
       })
       .finally(() => { if (alive) setReady(true); });
-    const { data: sub } = sb.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = sb.auth.onAuthStateChange((event, s) => {
+      // Signing out must also drop the shared promise. Without this,
+      // ensureSession would hand the next mount the session that was just
+      // signed out of.
+      if (event === 'SIGNED_OUT') bootstrap = null;
+      setSession(s);
+    });
     return () => { alive = false; sub.subscription.unsubscribe(); };
   }, []);
 
   const signOut = useCallback(async () => {
+    bootstrap = null;
     await supabaseBrowser()?.auth.signOut();
   }, []);
 
