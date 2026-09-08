@@ -33,11 +33,33 @@ import { captchaToken } from '@/lib/captcha';
  * sign-in and finishing it, which is exactly when a flag has not been set yet.
  * Everyone awaits the same promise, so there is exactly one sign-in.
  */
+/**
+ * Held on the page itself, not just in this module.
+ *
+ * Module state is per module INSTANCE, and a bundler is free to give two
+ * chunks their own copy -- at which point a module-level singleton silently
+ * becomes two singletons. The page is the thing there is exactly one of, so
+ * the lock lives there. Production bore this out: the burst of new accounts
+ * per page load fell from six to two, not to one.
+ */
+const LOCK = '__pokaiSession';
+type LockHolder = { [LOCK]?: Promise<Session | null> | null };
+
+function held(): Promise<Session | null> | null | undefined {
+  return typeof window === 'undefined' ? bootstrap : (window as unknown as LockHolder)[LOCK];
+}
+function hold(p: Promise<Session | null> | null) {
+  bootstrap = p;
+  if (typeof window !== 'undefined') (window as unknown as LockHolder)[LOCK] = p;
+}
+
+/** Server-side fallback for the lock, and what the tests read. */
 let bootstrap: Promise<Session | null> | null = null;
 
 export function ensureSession(sb: NonNullable<ReturnType<typeof supabaseBrowser>>): Promise<Session | null> {
-  if (bootstrap) return bootstrap;
-  bootstrap = (async () => {
+  const existing = held();
+  if (existing) return existing;
+  const started = (async () => {
     const { data } = await sb.auth.getSession();
     if (data.session) return data.session;
 
@@ -57,6 +79,13 @@ export function ensureSession(sb: NonNullable<ReturnType<typeof supabaseBrowser>
     // included. Resolves null until a sitekey is configured, so this is a
     // no-op today and correct the moment one is added.
     const token = await captchaToken();
+
+    // Look once more. Another tab may have signed in and written the session
+    // to shared storage while we were waiting on the captcha -- a promise can
+    // only deduplicate within one page, and storage is what the tabs share.
+    const { data: again } = await sb.auth.getSession();
+    if (again.session) return again.session;
+
     const { data: anon, error } = await sb.auth.signInAnonymously(
       token ? { options: { captchaToken: token } } : undefined,
     );
@@ -69,11 +98,12 @@ export function ensureSession(sb: NonNullable<ReturnType<typeof supabaseBrowser>
     return anon.session;
   })();
 
+  hold(started);
   // Clear on failure so a later mount can try again. Keeping a rejected
   // promise would mean one bad moment at startup left the app permanently
   // unable to sign anyone in.
-  bootstrap.catch(() => { bootstrap = null; });
-  return bootstrap;
+  started.catch(() => hold(null));
+  return started;
 }
 
 export function useSession() {
@@ -102,14 +132,14 @@ export function useSession() {
       // Signing out must also drop the shared promise. Without this,
       // ensureSession would hand the next mount the session that was just
       // signed out of.
-      if (event === 'SIGNED_OUT') bootstrap = null;
+      if (event === 'SIGNED_OUT') hold(null);
       setSession(s);
     });
     return () => { alive = false; sub.subscription.unsubscribe(); };
   }, []);
 
   const signOut = useCallback(async () => {
-    bootstrap = null;
+    hold(null);
     await supabaseBrowser()?.auth.signOut();
   }, []);
 

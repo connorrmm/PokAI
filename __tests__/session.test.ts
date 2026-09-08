@@ -75,3 +75,62 @@ describe('ensureSession', () => {
     expect(working.signIns()).toBe(1);
   });
 });
+
+/**
+ * The lock has to survive a second copy of the module.
+ *
+ * Module state is per module INSTANCE. A bundler may hand two chunks their own
+ * copy, and a module-level singleton then quietly becomes two singletons. In
+ * production the burst of accounts per page load fell from six to two rather
+ * than to one, which is what that looks like from the outside.
+ */
+describe('ensureSession across module copies', () => {
+  it('shares one sign-in with a second copy of the module on the same page', async () => {
+    const g = globalThis as unknown as { window?: unknown };
+    const hadWindow = 'window' in g;
+    g.window = g.window ?? {};
+    try {
+      const sb = fakeClient();
+      vi.resetModules();
+      const a = await import('@/components/Auth');
+      vi.resetModules();               // a genuinely separate module instance
+      const b = await import('@/components/Auth');
+      expect(a).not.toBe(b);
+
+      await Promise.all([a.ensureSession(sb as never), b.ensureSession(sb as never)]);
+      expect(sb.signIns()).toBe(1);
+    } finally {
+      if (!hadWindow) delete g.window;
+    }
+  });
+
+  it('does not sign in again when another tab got there first', async () => {
+    // Two tabs cannot share a promise, but they do share storage. Looking once
+    // more after the captcha wait is what catches that.
+    const g = globalThis as unknown as { window?: unknown };
+    const hadWindow = 'window' in g;
+    g.window = g.window ?? {};
+    try {
+      let stored: unknown = null;
+      let signIns = 0;
+      const sb = {
+        auth: {
+          getSession: async () => {
+            const s = stored;
+            // The other tab finishes while we are waiting on the captcha.
+            stored = { access_token: 'from-the-other-tab' };
+            return { data: { session: s } };
+          },
+          signInAnonymously: async () => { signIns += 1; return { data: { session: {} }, error: null }; },
+        },
+      };
+      vi.resetModules();
+      const { ensureSession } = await import('@/components/Auth');
+      const session = await ensureSession(sb as never);
+      expect(signIns).toBe(0);
+      expect(session).toMatchObject({ access_token: 'from-the-other-tab' });
+    } finally {
+      if (!hadWindow) delete g.window;
+    }
+  });
+});
