@@ -65,6 +65,8 @@ export interface ScanDiagnostics {
    * when the full number matched none. These are ranked first.
    */
   setTotalMatchCount?: number | null;
+  /** Did the looked-up cards reach our own catalog, and if not, why not? */
+  catalogWrite?: { cards: number | null; error?: string } | null;
   /**
    * How many candidates share the holofoil pattern read from the photo. These
    * are ranked first. Ranking only -- see the note in the identify route.

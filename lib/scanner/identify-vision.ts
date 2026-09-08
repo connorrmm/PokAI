@@ -202,6 +202,7 @@ export async function identifyWithVision(
     autoAcceptFloor: d.autoAcceptFloor ?? null,
     uniquelyResolved: Boolean(d.uniquelyResolved),
     setTotalMatchCount: typeof d.setTotalMatchCount === 'number' ? d.setTotalMatchCount : null,
+    catalogWrite: d.catalogWrite ?? null,
     patternMatchCount: typeof d.patternMatchCount === 'number' ? d.patternMatchCount : null,
     numberDetail: crops ? {
       sourceWidth: crops.sourceWidth,

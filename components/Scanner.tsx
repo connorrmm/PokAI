@@ -896,6 +896,12 @@ function Diagnostics({ d, vision }: { d?: ScanDiagnostics; vision?: CardRead | n
       (d.numberDetail.digitPx < 25 ? ' — too little detail to read' : ''),
     ]] as Array<[string, string]>) : []),
     ['Cards found in database', String(d.candidatesFound)],
+    ...(d.catalogWrite ? ([[
+      'Saved to our card catalog',
+      d.catalogWrite.error
+        ? `FAILED — ${d.catalogWrite.error}`
+        : `${d.catalogWrite.cards} card${d.catalogWrite.cards === 1 ? '' : 's'}`,
+    ]] as Array<[string, string]>) : []),
     // Always shown, including "unknown". A missing row cannot be told apart
     // from an undeployed build, and "the model declined to guess" is a
     // completely different result from "this code never ran".

@@ -39,10 +39,20 @@ function isSecret(number: string | null): boolean {
  * must not fail because our cache could not be written -- the user got their
  * answer, and our bookkeeping is our problem.
  */
-export async function cacheCards(cards: ApiCard[]): Promise<void> {
-  if (!cards.length) return;
+export interface CacheResult {
+  /** How many card rows were written, or null when nothing was attempted. */
+  cards: number | null;
+  /** The real reason nothing was written. Surfaced, never only logged. */
+  error?: string;
+}
+
+export async function cacheCards(cards: ApiCard[]): Promise<CacheResult> {
+  if (!cards.length) return { cards: 0 };
   const sb = admin();
-  if (!sb) return;
+  // Silence here meant a scan could succeed, the card could be missing from
+  // the catalog, and saving it could then fail with a foreign-key error --
+  // with nothing anywhere saying why. Report it.
+  if (!sb) return { cards: null, error: 'no service-role client (SUPABASE_SERVICE_ROLE_KEY missing or unreadable)' };
 
   try {
     const rows = cards
@@ -60,10 +70,13 @@ export async function cacheCards(cards: ApiCard[]): Promise<void> {
         source: 'tcgapi.dev',
         synced_at: new Date().toISOString(),
       }));
-    if (!rows.length) return;
+    if (!rows.length) return { cards: 0, error: 'no usable rows (every card lacked an id or a name)' };
 
     const { error } = await sb.from('cards').upsert(rows, { onConflict: 'id' });
-    if (error) { console.warn('Could not cache cards:', error.message); return; }
+    if (error) {
+      console.warn('Could not cache cards:', error.message);
+      return { cards: 0, error: `cards upsert failed: ${error.message}` };
+    }
 
     // Prices are appended, not upserted: card_prices is a time series and
     // card_prices_latest reads the most recent row per card and printing.
@@ -110,10 +123,16 @@ export async function cacheCards(cards: ApiCard[]): Promise<void> {
 
       if (fresh.length) {
         const { error: pErr } = await sb.from('card_prices').insert(fresh);
-        if (pErr) console.warn('Could not cache prices:', pErr.message);
+        if (pErr) {
+          console.warn('Could not cache prices:', pErr.message);
+          return { cards: rows.length, error: `prices insert failed: ${pErr.message}` };
+        }
       }
     }
+    return { cards: rows.length };
   } catch (e) {
-    console.warn('Could not cache cards:', e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn('Could not cache cards:', msg);
+    return { cards: null, error: msg };
   }
 }

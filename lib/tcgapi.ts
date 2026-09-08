@@ -11,7 +11,7 @@
  */
 import 'server-only';
 import type { ApiCard } from './scanner/types';
-import { cacheCards } from './catalog';
+import { cacheCards, type CacheResult } from './catalog';
 import { normaliseCard, type TcgApiCard } from './tcgapi-normalise';
 
 export { normaliseCard };
@@ -77,6 +77,17 @@ async function fetchWithRetry(url: string, maxAttempts = 3): Promise<Response> {
     : new TcgApiError('Card database unreachable', 503);
 }
 
+/**
+ * How the most recent catalog write went, for diagnostics.
+ *
+ * Module-level rather than threaded through every return type, because
+ * searchCards' signature is used in several places and this is a debugging
+ * aid, not part of the contract. Serverless instances handle one request at a
+ * time, so this cannot bleed between users' requests.
+ */
+let lastCacheResult: CacheResult | null = null;
+export function lastCatalogWrite(): CacheResult | null { return lastCacheResult; }
+
 export async function searchCards(query: string, limit = 40): Promise<ApiCard[]> {
   const q = query.trim();
   if (!q) return [];
@@ -92,7 +103,7 @@ export async function searchCards(query: string, limit = 40): Promise<ApiCard[]>
   // can forget to -- and the rows written are the provider's answer to OUR
   // server, never anything a browser supplied. See lib/catalog.ts for why the
   // cache being empty broke saving a card entirely.
-  await cacheCards(cards);
+  lastCacheResult = await cacheCards(cards);
 
   return cards;
 }

@@ -13,9 +13,10 @@ const upserts: Array<{ table: string; rows: unknown[]; opts?: unknown }> = [];
 const inserts: Array<{ table: string; rows: unknown[] }> = [];
 let latestPrices: Array<Record<string, unknown>> = [];
 let failOn: string | null = null;
+let noAdmin = false;
 
 vi.mock('../lib/supabase/server', () => ({
-  admin: () => ({
+  admin: () => (noAdmin ? null : {
     from(table: string) {
       return {
         upsert(rows: unknown[], opts?: unknown) {
@@ -123,11 +124,24 @@ describe('cacheCards', () => {
     expect(inserts).toHaveLength(0);
   });
 
-  it('never throws when the catalog write fails', async () => {
+  it('never throws when the catalog write fails, and REPORTS why', async () => {
     // A scan that found the right card must not fail because our bookkeeping
-    // could not be written. The user got their answer.
+    // could not be written -- the user got their answer. But silence here let
+    // a scan succeed, the card go unwritten, and SAVING it then fail with a
+    // foreign-key error, with nothing anywhere saying why.
     failOn = 'cards';
-    await expect(cacheCards([card()])).resolves.toBeUndefined();
+    const res = await cacheCards([card()]);
+    expect(res.cards).toBe(0);
+    expect(res.error).toMatch(/cards upsert failed/);
     expect(console.warn).toHaveBeenCalled();
+  });
+
+  it('reports a missing service-role client rather than doing nothing quietly', async () => {
+    const { cacheCards: fresh } = await import('../lib/catalog');
+    noAdmin = true;
+    const res = await fresh([card()]);
+    noAdmin = false;
+    expect(res.cards).toBeNull();
+    expect(res.error).toMatch(/service-role/i);
   });
 });

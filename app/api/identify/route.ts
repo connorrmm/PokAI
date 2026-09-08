@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readCardFromImage } from '@/lib/vision';
-import { searchCards, TcgApiError } from '@/lib/tcgapi';
+import { searchCards, TcgApiError, lastCatalogWrite } from '@/lib/tcgapi';
 import { rankCandidatesByName } from '@/lib/scanner/rank';
 import { resolveCandidates, SIGNAL_CERTAINTY_FLOOR } from '@/lib/scanner/resolve';
 import { computeConfidence, autoAcceptFloorFor, isClearlyBest } from '@/lib/scanner/confidence';
@@ -207,6 +207,10 @@ export async function POST(req: Request) {
         holoPattern: read.holo_pattern,
         queriesTried: queries,
         candidatesFound: cards.length,
+        // Whether the cards just looked up actually reached our own catalog.
+        // A scan can succeed while this fails, and then SAVING the card fails
+        // with a foreign-key error and nothing says why.
+        catalogWrite: lastCatalogWrite(),
       },
       usage: usageOf(vision),
     });
