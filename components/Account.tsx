@@ -77,25 +77,56 @@ export default function Account({
     setBusy(true);
     try {
       if (mode === 'create') {
+        const wanted = normaliseEmail(email);
+
         // updateUser, not signUp. signUp would create a SECOND account and
         // leave the collection behind on the first one.
-        const { data, error: err } = await sb.auth.updateUser({
-          email: normaliseEmail(email),
-          password,
-        });
+        const { error: err } = await sb.auth.updateUser({ email: wanted, password });
         if (err) { setError(explainAuthError(err.message)); return; }
 
-        // Supabase may hold the email as pending until it is confirmed. The
-        // password is live immediately either way, so say which state this is
-        // rather than a cheerful "done" that is only half true.
-        const pending = data.user?.new_email && data.user.new_email !== data.user.email;
-        setDone(pending
-          ? `Almost there — open the confirmation link we sent to ${normaliseEmail(email)}. `
+        /**
+         * Now ask the SERVER what it actually stored.
+         *
+         * This exists because of a specific failure. On 2026-09-14 Sterling
+         * created an account, the form told him it had worked, and the database
+         * had no such account: the anonymous user was untouched -- no email, no
+         * password, no pending confirmation. The old code trusted the reply it
+         * got back and announced success from it.
+         *
+         * getUser() is a round trip with the access token, so it reports what
+         * the server believes rather than what this tab believes. The project
+         * rule "verify before claiming" applies to the app as much as to us:
+         * telling someone their collection is safe when it is not is the worst
+         * thing this screen can do.
+         */
+        const { data: check, error: checkErr } = await sb.auth.getUser();
+        const u = check?.user;
+
+        if (u?.email === wanted) {
+          setDone('Your account is set up. Your collection is attached to it and will '
+            + 'follow you to any device you sign in on.');
+          onDone?.();
+          return;
+        }
+
+        if (u?.new_email === wanted) {
+          setDone(`Almost there — open the confirmation link we sent to ${wanted}. `
             + 'Your cards are already safe on this account; confirming is what lets you '
-            + 'sign in on another device.'
-          : 'Your account is set up. Your collection is attached to it and will follow '
-            + 'you to any device you sign in on.');
-        onDone?.();
+            + 'sign in on another device.');
+          onDone?.();
+          return;
+        }
+
+        // Rule 4: say what actually happened, and what state the account is in
+        // now, rather than a success message that is not true.
+        setError(
+          `The account was not saved. Supabase reported no error, but the server still `
+          + `has no email on this account${u?.is_anonymous ? ' (it is still anonymous)' : ''}`
+          + `${checkErr ? `, and checking failed with: ${checkErr.message}` : ''}. `
+          + 'Your cards are safe and still here. Please try again, and if it keeps '
+          + 'happening tell Sterling — this is a fault worth reporting, not something '
+          + 'you are doing wrong.',
+        );
         return;
       }
 
