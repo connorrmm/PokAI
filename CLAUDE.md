@@ -7,41 +7,18 @@ Founder: Sterling Sanchez Garcia. Co-founder: Connor Miller.
 Sterling is non-technical. Explain tradeoffs in plain language, and do not
 assume a technical decision is obvious to him just because it's obvious to you.
 
+**Read `docs/STATUS.md` first** — it says what actually exists, verified against
+the running code and the live database on 2026-09-14. If that date is old by the
+time you read it, re-verify before trusting it. A stale status document is worse
+than none, because it gets believed.
+
+New developer? `docs/HANDOVER.md` is written for you.
+
 ## You own the technical decisions
 
-Stack, architecture, framework, hosting, database, and file layout are **yours
-to choose**. There is a prototype in this repo, but it is a prototype: a single
-HTML file built fast to prove the idea. Do not treat its structure as a
-constraint or a pattern to follow. If rebuilding is the right call, say so and
-explain why in plain language before doing it.
-
-What is NOT yours to change is the product behavior in `docs/PRODUCT.md`.
-Those rules came from real user thinking, not from implementation convenience.
-
-Read `docs/STATUS.md` first — it says what actually exists versus what people
-have merely talked about, and it was verified against the real repository on
-2026-08-31. Two findings there change how you should read everything else:
-the backend described in earlier notes **is not in this repository and never
-has been**, and the committed `index.html` is an **older build** than the
-prototype preserved at `prototype/pokai-app-bundled.html`.
-
-## Decisions already made — do not relitigate without reason
-
-Settled 2026-08-31; reasoning in `docs/ARCHITECTURE.md`.
-
-- **Stack:** Vercel (front end + serverless API), Supabase (Postgres, auth,
-  storage), tcgapi.dev (card data + prices), Claude Haiku 4.5 (vision).
-  Switched from Netlify to Vercel on 2026-08-31 at Sterling's direction.
-  Vercel's free Hobby plan is non-commercial only — Pro ($20/mo) before launch.
-- **Web app, not native.**
-- **Extend the prototype, don't rebuild it.** The OCR pipeline carries real
-  hard-won fixes; the missing pieces go behind it.
-- **Recognition moves to a server-side vision model.** There is no AI vision
-  model in the app today — it is Tesseract OCR.
-- **The browser never calls a third-party API directly.** It calls our API; our
-  API holds every paid key. This is what keeps keys out of a public repo.
-- **Card data is cached in our own database** and refreshed on a schedule. The
-  scan path never depends on a third party being up.
+Stack, architecture, framework, hosting, and file layout are **yours to choose**.
+What is NOT yours to change is the product behaviour in `docs/PRODUCT.md`. Those
+rules came from real user thinking, not from implementation convenience.
 
 ## Non-negotiable product rules
 
@@ -52,49 +29,78 @@ Settled 2026-08-31; reasoning in `docs/ARCHITECTURE.md`.
 2. **Never fabricate a price.** If live market data is unavailable, say the value
    is unavailable. Do not estimate, interpolate, or fall back to a stale number
    presented as current.
-3. **Never invent card data.** Card names, set names, numbers, and rarities come
+3. **Never invent card data.** Card names, set names, numbers and rarities come
    from a real card database. If a lookup fails, surface the failure.
-4. **Show the real error.** When a scan fails, display what actually went wrong,
-   not a generic "something went wrong." Sterling has repeatedly been unable to
-   debug because the app hid the real error text.
+4. **Show the real error.** Display what actually went wrong, not a generic
+   "something went wrong." This project has lost days, more than once, to an app
+   that hid its own failure.
 
-## Known open defect — do not ship over it
+Rule 1 has been violated in production once. Ranking by foil pattern ran *after*
+the step that decided a card was identified, and the app showed one card at 100%
+confidence and the wrong price — $0.76 against a real $7.43. Every test passed.
+`lib/scanner/resolve.ts` now enforces the ordering structurally: **weak signals
+rank, strong signals identify, ranking runs first.** Preserve that property.
 
-The committed `index.html` violates rule 1 above. On a low-confidence read it
-returns no candidate list (line 2148), so the user hits the dead end
-`docs/PRODUCT.md` forbids; on an ambiguous read it truncates candidates to 8
-(line 2150). `prototype/pokai-app-bundled.html` already does both correctly.
-Fix this before building anything on top of the scanner.
+## Decisions already made — do not relitigate without reason
+
+- **Stack:** Next.js 15 (App Router) + React 19 + TypeScript on Vercel; Supabase
+  (Postgres 17, auth, RLS); tcgapi.dev for card data and prices; Claude Haiku 4.5
+  for vision. Vitest for tests.
+- **Web app, not native.**
+- **The browser never calls a third-party API directly.** It calls our API; our
+  API holds every paid key. This is what keeps keys out of a public repo.
+- **Card data is cached in our own database.** The cache is an optimisation, not
+  a precondition: when it cannot price a card the app asks the provider directly.
+  Making the cache a requirement is what once produced a $0.00 portfolio.
+- **Anonymous accounts by default.** Nothing blocks a first scan. Email and
+  password are an upgrade on the same account, never a gate in front of the app.
+- **Vercel's free Hobby plan is non-commercial only** — Pro ($20/mo) before this
+  operates as a business.
+
+## Current defects — do not ship over them
+
+Both are documented with evidence in `docs/STATUS.md` §6 and `docs/HANDOVER.md`.
+
+1. **Collections fragment across anonymous accounts.** Narrowed, not closed. The
+   highest-value bug in the product: a collector whose cards vanish does not
+   come back.
+2. **The card catalogue has never cached a row** — the service-role key in Vercel
+   is rejected by Supabase. Costs money and latency, not correctness.
 
 ## Working agreements
 
 - **Verify before claiming.** Do not report something as working because the code
   looks correct. Run it. If you cannot run it, say plainly that you could not.
-  This project has already lost time to confident claims that turned out wrong.
-- **Say when you don't know.** Especially about live API behavior, hosting state,
-  and whether something is deployed. Guessing here has burned real hours.
-- **No secrets in client code.** Any paid API key belongs server-side. Keys live
-  in Vercel environment variables. This repo is public — anything committed to
-  it is published to the world.
+  This project has already lost real time to confident claims that were wrong.
+- **Say when you don't know.** Especially about live API behaviour, hosting
+  state, and whether something is deployed.
+- **No secrets in client code.** This repo is public — anything committed to it
+  is published to the world. Keys live in Vercel environment variables, and they
+  travel from the provider's dashboard to Vercel directly: never through a
+  commit, an email, or a chat window, including this one.
+- **`SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security entirely.** It is for
+  catalogue reads only. Never use it to read user data — `asUser()` exists for
+  that, and mixing them is how one person sees another's collection.
+- **Changed the database? Add a migration** in `supabase/migrations/`.
+- **Changed an RLS policy? Re-run the RLS tests** (`supabase/README.md`). An RLS
+  mistake is silent.
 - Ask before adding a paid dependency or a service that costs money.
 
 ## Reference docs
 
-Read these when the task touches them; they are not needed every session.
-
-- `docs/STATUS.md` — what exists, what doesn't, what's deployed (read first)
+- `docs/HANDOVER.md` — for a developer joining: how to run it, what to watch for
+- `docs/STATUS.md` — what exists, what's broken, what's unverified (read first)
 - `docs/PRODUCT.md` — vision, MVP scope, the values behind the rules above
-- `docs/SCANNER.md` — recognition pipeline: real failure modes and tuned values
-- `docs/CATALOG.md` — card database strategy and a verified naming bug
+- `docs/SCANNER.md` — recognition: real failure modes and tuned values
+- `docs/CATALOG.md` — card data strategy, the licence, a verified URL bug
 - `docs/OPEN-QUESTIONS.md` — decisions Sterling still needs to make
 - `docs/ARCHITECTURE.md` — the stack, and why each piece was chosen
-- `docs/ROADMAP.md` — build order to production, phase by phase
-- `docs/SETUP-CHECKLIST.md` — accounts and keys Sterling must create
-- `docs/MODEL-POLICY.md` — which model to use for which work, to protect usage limits
+- `docs/ROADMAP.md` — build order to production
+- `docs/MODEL-POLICY.md` — which model for which work, to protect usage limits
 
 `docs/SCANNER.md` and `docs/CATALOG.md` contain findings from real testing
-against the live API and real devices. Some are non-obvious and cost hours to
-discover. Read the relevant one before touching recognition or card data.
+against the live API and real devices. Some are non-obvious and cost hours.
+Read the relevant one before touching recognition or card data.
 
 ## Model routing — keep the usage budget alive
 
@@ -105,9 +111,9 @@ fetches.** Three Sonnet-pinned helper agents are defined in `.claude/agents/`:
 - `verifier` — running builds, tests, servers, and reporting the raw output
 - `scribe` — mechanical doc edits once a decision is already made
 
-Delegate to them by default. Never read `index.html` whole into the main
-conversation — it is 2.7 MB and ~93% embedded base64 images. Filter first with
-`awk 'length($0)<600' index.html`, which leaves the ~180 KB that is actual code.
+Delegate to them by default. `prototype/pokai-app-bundled.html` and
+`public/app.html` are multi-megabyte and mostly base64 images — never read either
+whole into the conversation; filter with `awk 'length($0)<600'` first.
 
 Keep on Opus regardless of how mechanical it looks: recognition and confidence
 logic, anything touching the "never guess" rule, security, and anything
@@ -116,22 +122,12 @@ and hard to notice.
 
 ## Live infrastructure
 
-- **Supabase project `yycsgtsvkhguzihyxtur`** (`us-east-2`, Postgres 17) is real
-  and the schema is applied. Migrations live in `supabase/migrations/` — if you
-  change the database, add a migration there too.
-- Row-level security is on for every table and was verified by test. **Re-run
-  those tests after any policy change** (`supabase/README.md`) — an RLS mistake
-  is silent, and the failure mode is one user seeing another's collection.
-- **Vercel is connected but has no project.** Nothing is deployed anywhere.
-- **tcgapi.dev has never been successfully called.** A key exists, but the
-  sandbox blocks the domain. Treat every documented detail about it as
-  unverified until a real request succeeds.
-
-## Repository facts worth not re-deriving
-
-- The repo is **public**. No paid API key may ever appear in client code.
-- The whole repo is `index.html` + `README.md` + docs. There is no build step,
-  no package manager, no test suite, and no CI.
-- `index.html` hardcodes `http://localhost:3001` as its backend (line 1688).
-  A deployed HTTPS page cannot call that at all — browsers block it as mixed
-  content. This must be fixed before any deploy is meaningful.
+- **Production:** https://pok-ai-drab.vercel.app, deploying from `main`.
+- **Supabase project `yycsgtsvkhguzihyxtur`** (`us-east-2`, Postgres 17), schema
+  = migrations 0001–0009, all applied. RLS on for every table.
+- **tcgapi.dev works in production** — it is pricing real cards. It has never
+  been reachable from the development sandbox, so treat anything about its
+  behaviour that is not marked verified as secondhand.
+- **`/api/health`** reports configuration, where each value came from (runtime vs
+  baked in at build), whether Supabase accepts the service-role key, and which
+  commit is answering.

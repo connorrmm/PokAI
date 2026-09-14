@@ -1,5 +1,32 @@
 # What Sterling needs to do
 
+> **Note, 2026-09-14.** Items 1–4 are done; the app is live. What remains for
+> Sterling is listed in "Still outstanding" immediately below. The rest of this
+> document is kept for the reasoning and the costs, which have not changed.
+
+## Still outstanding
+
+1. **Replace the Supabase service-role key in Vercel.** The one stored there is
+   being rejected ("Invalid API key") — the signature of a key rotated in
+   Supabase while Vercel kept the old one. Copy the current service-role/secret
+   key from Supabase → Project Settings → API Keys into the existing
+   `SUPABASE_SERVICE_ROLE_KEY` variable in Vercel, then redeploy. Roughly ninety
+   seconds, and it needs someone with both dashboards open. Until then the card
+   catalogue cannot be written and every page load re-fetches prices.
+
+2. **Upgrade to Vercel Pro, $20/month, before operating commercially.** The free
+   Hobby plan is licensed for non-commercial personal use only. With an investor
+   on the cap table this stops being optional.
+
+3. **Decide whether the repository stays public.** It has been public since the
+   start, which was fine for a prototype. With a shareholder and an outside
+   developer it is a deliberate decision, not a default.
+
+4. **Turnstile (optional, anti-abuse).** Site key → Vercel, secret → Supabase,
+   in that order. Until the site key is set the captcha code is inert.
+
+---
+
 Written 2026-08-31. This is the complete list of things that need a human with
 account access. Nothing here needs technical knowledge; each item says what it
 is, what it costs, and why it's needed.
@@ -8,36 +35,16 @@ Work top to bottom — items 1–4 unblock everything else.
 
 ---
 
-## 1. Vercel — **connected, but no project yet**
+## 1. Vercel — **done, deployed**
 
 Sterling connected Vercel on 2026-08-31 (switching from the earlier Netlify
 plan). Account: `longsterling61-4597's projects`, on the **Hobby** plan.
 
-**Still to do — and it needs the dashboard, not me.** Creating the project
-through Vercel's API fails in a way I cannot work around: it reports success,
-returns a project id, and the project is then unreadable (404) and absent from
-the project list. Tried twice under two names, same result each time.
+**Done.** The project exists and deploys from `main` on every push. Production
+is **https://pok-ai-drab.vercel.app**.
 
-Do this by hand instead, about a minute:
-
-1. Go to **vercel.com/dashboard**.
-2. If a **`pokai`** or **`pokai-app`** project is listed, delete it — those are
-   half-created leftovers from the failed API attempts.
-3. **Add New → Project → Import Git Repository →** pick `connorrmm/PokAI`.
-4. Framework Preset: **Next.js**. Leave the build and output settings on their
-   defaults.
-
-   **Correction, 2026-08-31:** this step previously said to choose "Other" with
-   a blank build command. That was right when the repo was a single HTML file
-   and became wrong the moment the Next.js rebuild merged — with "Other" saved,
-   Vercel serves files without building, so the API routes do not exist and,
-   since `index.html` moved into `public/`, the site 404s entirely.
-   `vercel.json` now pins `"framework": "nextjs"`, which overrides the dashboard
-   setting, so a project created either way builds correctly.
-5. Deploy, then send me the URL.
-
-The never-guess defect that previously made deploying a bad idea is now fixed,
-so the deployed app will be honest.
+`vercel.json` pins `"framework": "nextjs"`, so the build settings are correct
+regardless of what the dashboard says.
 
 **Before launch you must upgrade to Vercel Pro, $20/month.** The free Hobby plan
 is licensed for non-commercial personal use only, and PokAI is commercial. Not
@@ -126,8 +133,9 @@ Neither key was ever written to this repository.
 
 ## Questions only Sterling can answer
 
-1. ~~Is anything already live?~~ **ANSWERED** — no. The Vercel account has zero
-   projects, and GitHub Pages is off. Nothing is deployed anywhere.
+1. ~~Is anything already live?~~ **ANSWERED — and now out of date.** As of
+   2026-09-14 the app is live at https://pok-ai-drab.vercel.app, deploying from
+   `main`.
 2. **What does "condition tracking" mean?** It's listed as MVP but never defined.
    Does the user pick a grade from a list? Do we assess it from the photo? Do we
    integrate with a grading service? The first is a day's work; the last is a

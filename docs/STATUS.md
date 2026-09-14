@@ -1,875 +1,210 @@
 # Current status — what actually exists
 
-Last verified: **2026-08-31**, against commit `1641dfe` on `main`.
-Updated the same day with the backend question resolved and the production plan
-decided — see `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and
-`docs/SETUP-CHECKLIST.md`.
+**Last verified: 2026-09-14**, against commit `2465e72` on `main`, by running
+the test suite, the type checker and the production build, and by querying the
+live Supabase database.
 
-Every claim in this file was checked against the repository or observed by
-running the app. Where something could not be checked, it says so and says why.
-If you are about to trust a sentence here, the "How this was verified" line at
-the end of each section tells you how far that trust should go.
+Every claim here was checked. Where something could not be checked, it says so
+and says why — see §8, which is the list of things this document does *not*
+know.
 
-The previous version of this file was written without access to the repository.
-Most of it was right. The parts that were wrong were wrong in an expensive
-direction, so there is a correction log at the bottom.
+> **The previous version of this file, verified 2026-08-31, was completely
+> superseded.** It described a repository of two files with no build step, no
+> package manager and no tests, and said nothing was deployed. All of that was
+> true on the day it was written and none of it is true now. A correction log is
+> at the bottom. If you are reading an older copy of this file anywhere, discard
+> it.
 
 ---
 
 ## 1. The repository
 
-Public repo: `github.com/connorrmm/PokAI` — default branch `main`, created
-2026-08-04, last pushed 2026-08-29.
+Public repo: `github.com/connorrmm/PokAI`, default branch `main`.
 
-**The entire repository is two files:**
+A Next.js 15 application: ~60 TypeScript and TSX source files, 9 SQL migrations,
+8 test files.
 
-| File | Size | What it is |
-|---|---|---|
-| `index.html` | 2.74 MB / 3,421 lines | The whole prototype — markup, CSS, and ~2,650 lines of JavaScript |
-| `README.md` | 7 bytes | The text `# PokAI` |
-
-Of `index.html`'s 2.74 MB, about **2.56 MB (93%) is 14 embedded base64 images** —
-12 card photos plus a favicon and a wordmark. The actual code is roughly 180 KB.
-
-There are 11 commits. All of them were made by `connorrmm` through the GitHub
-website, not from a development machine — every message is `Add files via
-upload`, `Delete index.html`, or `Initial commit`. Only three filenames have
-ever existed in the history: `README.md`, `index.html`, and
-`pokai-prototype github.html`.
-
-**Nothing else has ever been committed.** No `package.json`, no server code, no
-database schema, no build config, no tests, no CI, no deploy config.
-
-*How this was verified:* `git log --all`, `git rev-list --objects --all` to list
-every file ever committed including deleted ones, and the GitHub API for repo
-metadata. This is solid.
-
----
-
-## 2. Where the old status file was wrong
-
-### It said the backend "has never run." The truth is worse: it isn't here.
-
-The previous file described "an Express app with routes for search, identify,
-scan history and corrections, plus a Supabase schema and catalog-building
-scripts," and said the decision to keep, adapt, or discard it was open.
-
-That decision is not open, because **none of that code is in this repository and
-none of it ever has been.** I checked every file in every commit, including
-deleted ones. There is no backend to keep, adapt, or discard.
-
-`index.html` line 1688 refers to it as if it exists:
-
-```js
-const POKAI_BACKEND_BASE = window.POKAI_BACKEND_BASE || 'http://localhost:3001';
+```
+app/            5 pages, 7 API routes
+components/     13 components
+lib/            25 modules, including lib/scanner/ (12)
+supabase/       migrations 0001–0009
+__tests__/      148 tests
+docs/           this and 9 others
+prototype/      the original single-file app — reference only, not built or served
+public/app.html the older prototype build — reference only
 ```
 
-with a comment saying "see /pokai-backend". There is no `/pokai-backend`.
+`index.html` — the 2.7 MB single-file prototype that used to *be* the product —
+**is no longer in the repository root.** The preserved copy is
+`prototype/pokai-app-bundled.html`. Any instruction anywhere referring to
+"`index.html` line 2148" is obsolete: that defect was in the prototype, and the
+prototype is not the product.
 
-**RESOLVED 2026-08-31.** Sterling confirmed: all prior work was done in Claude
-chat sessions and pasted in by hand. Claude Code was never used, and no backend
-was ever saved as real files. So there is nothing to recover — the backend gets
-built fresh. See `docs/ARCHITECTURE.md`.
+**How this was verified:** `find` over the working tree, and `git log`.
 
-This is better news than it sounds. There is no half-finished server to inherit,
-debug, or trust. The first backend can be built small, deliberately, and to fit
-the plan rather than to fit whatever a chat session produced months ago.
+---
 
-### It said Sterling's prototype is `pokai-app.html`. The committed app is a different, older build.
+## 2. Does it build, typecheck and test?
 
-The handoff bundle contained a file called `pokai-app.html` (3,479 lines). The
-repository contains `index.html` (3,421 lines). They are **not the same file**,
-and the bundled one is **ahead**, not behind.
+Yes. All three, on 2026-09-14:
 
-The bundled version contains three pieces of work that **have never existed in
-any commit in this repository**:
-
-| Feature | Bundled `pokai-app.html` | Committed `index.html` |
+| Check | Command | Result |
 |---|---|---|
-| Retry with backoff on card lookups | `fetchCardSearch()` — 3 attempts, 350ms backoff, 12s timeout | **Absent.** One `fetch`, no retry |
-| Full candidate list on a low-confidence read | Returns every name match | **Returns nothing to pick from** |
-| Candidate list when ambiguous | Every name match, untruncated | Truncated to the top 8 |
-| Placeholder art when a card image fails | `generatePlaceholderArt()` draws an SVG | **Absent.** Card renders with no art |
+| Tests | `npm test` | **148 passed**, 8 files |
+| Types | `npm run typecheck` | clean |
+| Build | `npm run build` | compiled successfully |
 
-I have preserved the bundled file at `prototype/pokai-app-bundled.html` so it
-cannot be lost again.
+**There is no CI.** Nothing runs any of the above automatically on a push or a
+pull request. This is the single cheapest gap to close and should be closed
+before a second developer commits.
 
-### The committed app violates the project's own number-one product rule.
-
-This is the most important finding in this document.
-
-`CLAUDE.md` rule 1 is "Never guess a card — if confidence is below the threshold,
-show every matching print and let the user pick." `docs/PRODUCT.md` adds that the
-list is never truncated, and that "a dead-end error is unacceptable."
-
-In the committed `index.html`, when the scanner is **not confident**, line 2148
-returns a result with no candidate list at all:
-
-```js
-return {ok:false, reason:'low_confidence', text, confidence, topGuess: top.apiCard};
-```
-
-Line 2317 only renders a picker `if(result.candidates && result.candidates.length > 0)`.
-So the user gets the dead end the product doc explicitly forbids. When the read
-is merely *ambiguous*, line 2150 caps the list at 8 (`ranked.slice(0, 8)`),
-which is the truncation the product doc also forbids.
-
-The bundled version gets both of these right. The fix already exists — it just
-isn't in git.
-
-*How this was verified:* read both files side by side at the cited line numbers,
-and confirmed with `git show <commit>:index.html` across all 11 commits that
-`fetchCardSearch` and `generatePlaceholderArt` have never appeared in this repo.
-This is solid.
+**How this was verified:** all three commands were run.
 
 ---
 
-## 3. What the old file got right
+## 3. What is deployed
 
-- **Nothing persists.** Confirmed twice: there is not one reference to
-  `localStorage`, `sessionStorage`, `indexedDB`, or cookies anywhere in the file,
-  and after loading the running app I read `localStorage` directly and it was
-  empty. Reload and everything is gone. No accounts, no saved collection.
-- **The demo pool is 22 hardcoded cards.** Confirmed at runtime:
-  `CARD_POOL.length` evaluated to `22` in the live page.
-- **No authentication of any kind.** No login, signup, or password anywhere. The
-  single user is the hardcoded string `'@you'`.
-- **No tests, no CI, no rate limiting, no payments, no image storage.**
-- **Scanner accuracy has never been measured.** Still true, and still the most
-  consequential gap on the project.
+Production: **https://pok-ai-drab.vercel.app**, on Vercel, deploying from `main`.
 
----
+The founder has confirmed by using it that scanning, pricing, the collection and
+the portfolio all work on a real phone against real cards. The live database
+holds real scans, real collection rows and a real recorded portfolio valuation
+(`$46.75`, 4 cards, 0 unpriced), which is corroborating evidence that the whole
+chain runs.
 
-## 4. What I ran, and what happened
-
-I served `index.html` over a local HTTP server and loaded it in a real headless
-Chromium browser. This is observed behaviour, not code reading.
-
-**Worked:**
-- The page loads and renders with **zero uncaught JavaScript errors**.
-- All three tabs are present and wired: `scan`, `portfolio`, `tourney`.
-- 12 of the 22 cards displayed art, from the embedded base64 photos.
-- Failures were handled gracefully — the app caught every network error and fell
-  back to its local pool instead of hanging or crashing.
-
-**Failed, and why it matters:**
-- Every card lookup hit `http://localhost:3001/api/search` and returned
-  `ERR_CONNECTION_REFUSED`. The other 10 cards rendered with **no art at all**,
-  because the placeholder generator isn't in this build.
-- Tesseract.js did not load. `typeof window.Tesseract` was `undefined`.
-
-**What I could NOT verify, and will not claim either way:**
-- **The scanner has not been proven to work by me.** Tesseract loads from a CDN
-  that is blocked in my sandbox, and there is no camera on this machine. The OCR
-  code is real and substantial — genuine crop math, an inverted-polarity retry,
-  hard timeouts on every async step, and real error text surfaced to the user —
-  but I have not seen it read a card. Do not let anyone tell you I confirmed the
-  scanner works. I confirmed the code exists and the page loads.
-- **Whether anything is deployed.** Now answered — see section 5.
+**How this was verified:** live database query, plus the founder's reports. It
+was *not* verified by fetching the site — see §8.
 
 ---
 
-## 5. Deployment — partly unresolved
+## 4. The live database
 
-**Verified:** GitHub Pages is **off** (`has_pages: false` from the GitHub API).
-No `netlify.toml`, `vercel.json`, `_redirects`, or GitHub Actions workflow has
-ever been committed.
+Supabase project **`yycsgtsvkhguzihyxtur`** (`us-east-2`, Postgres 17). Schema is
+migrations `0001`–`0009`, all applied.
 
-**ANSWERED 2026-08-31: nothing is deployed anywhere.** Sterling switched from
-Netlify to **Vercel** and connected it. I checked the Vercel account directly —
-team `longsterling61-4597's projects`, Hobby plan — and it contains **zero
-projects**. Combined with GitHub Pages being off, no PokAI site is live on the
-internet today.
+Tables: `cards`, `card_sets`, `card_prices` (+ `card_prices_latest` view),
+`collections`, `scans`, `corrections`, `portfolio_snapshots`, `profiles`,
+`scan_usage`, `sync_runs`.
 
-Vercel is now the deploy target for both the front end and the API. Its Hobby
-plan is licensed for non-commercial use only, so Pro at $20/month is required
-before launch. See `docs/ARCHITECTURE.md`.
+State on 2026-09-14:
 
-**This remains a real blocker before any deploy:** the committed app calls
-`http://localhost:3001`. On a deployed site that fails twice over — the visitor's
-own machine has nothing on port 3001, and a page served over HTTPS is not allowed
-to call `http://` at all (browsers block it as mixed content). So **if the site
-were deployed as-is today, its card lookups would be broken**, and it would run
-on the 22-card offline fallback.
+| | |
+|---|---|
+| Anonymous accounts | 90 |
+| Real (email) accounts | 2 |
+| Collection rows | 5, split across 2 accounts |
+| Cards cached | **0** |
+| Prices cached | **0** |
+| Last activity | 2026-09-08 19:57 UTC |
 
-Also relevant: **camera access requires HTTPS.** Vercel provides that, so
-scanning can work there in a way it cannot from a local file.
+Two of those numbers are defects and are explained in §6.
 
----
+Row-level security is on for every table and was verified by test. **Re-run
+those tests after any policy change** (`supabase/README.md`). An RLS mistake is
+silent and the failure mode is one user reading another's collection.
 
-## 6. Secrets — clean
-
-**No API keys, tokens, or credentials are committed.** Nothing needs to be
-rotated. This is genuinely good news.
-
-Checked: every blob in the full git history (not just the current files, so
-deleted content is covered) against high-confidence patterns for OpenAI, Stripe,
-AWS, GitHub, Google, Slack, SendGrid keys, JWTs and private keys; then a broader
-keyword sweep for `api_key`, `secret`, `password`, `token`, `bearer`,
-`authorization`, Supabase and Firebase references; then a specific check for keys
-embedded in URLs or request headers, which is the realistic way a client-side app
-leaks one.
-
-The only hits for the word "secret" are the Pokémon card rarity tier
-"Secret Rare."
-
-The only external URLs in the code are the Tesseract.js CDN, Google Fonts, and
-`http://localhost:3001`.
-
-**Worth knowing anyway: this repository is public.** Anyone can read it. That is
-fine today because there is nothing sensitive in it, but it becomes a live risk
-the moment a backend exists. The rule in `CLAUDE.md` — no paid API key ever in
-client code — is the thing that keeps it fine.
+**How this was verified:** SQL against the live database.
 
 ---
 
-## 6b. There is no AI vision model in the scanner
+## 5. What works
 
-Verified 2026-08-31. The scanner uses **Tesseract.js** (`index.html` line 1493,
-loaded from a CDN at line 672) — a traditional optical character recognition
-engine that matches letter shapes. It is not an AI model and does not understand
-what it is looking at.
+- **Scanning.** 2160p capture, corner crops, best-of-six frames, blur and glare
+  detected separately, auto-capture when the frame is sharp, torch control. A
+  vision model (Claude Haiku 4.5) identifies the card; on-device OCR is the
+  fallback.
+- **Never-guess.** Enforced in `lib/scanner/resolve.ts` and defended by 75 tests.
+  Weak signals rank, strong signals identify, ranking runs first.
+- **Card data and prices** from tcgapi.dev, which sources pricing from TCGplayer.
+- **Collections** — saving, quantity, condition, per-user isolation by RLS.
+- **Portfolio** — total value, change since the last recorded day, rarity
+  breakdown, collection score, achievements, top holdings, value history.
+- **Accounts** — anonymous by default so nothing blocks a first scan; email and
+  password can be added later and the collection carries over on the same
+  account.
+- **Anti-abuse** — scanning requires a session, a database-backed 300/day cap,
+  and Turnstile support that activates as soon as a site key is set.
+- **Diagnostics** — `/api/health` reports every variable's presence, whether its
+  value came from the runtime or was baked in at build time, whether Supabase
+  *accepts* the service-role key, and which commit is answering.
 
-There is **no** vision model, no image-recognition service, and no AI provider of
-any kind referenced anywhere in the application code. I grepped for every major
-provider and found nothing.
+---
 
-This is the root cause of the recognition weakness described in
-`docs/SCANNER.md`. Tesseract reads a cropped strip of pixels and returns its best
-guess at the text; foil glare, stylised fonts and holo backgrounds defeat it, and
-those are exactly the high-value cards that matter most.
+## 6. Known defects
 
-The fix is planned in `docs/ARCHITECTURE.md` — a real vision model reading the
-card server-side, replacing the OCR step while leaving the matching, confidence
-and never-guess logic intact.
+### a) Collections fragment across anonymous accounts — **highest value**
 
-## 7. Honest summary of what is built
+Anonymous accounts are still occasionally created in pairs, and a user's cards
+can end up on an account their browser can no longer reach. This happened to the
+founder: four cards across three accounts, reunited by hand on 2026-09-08.
 
-**Real and working:** a single-file browser prototype with a genuine OCR pipeline
-(multi-crop, inverted-polarity retry, full-frame fallback, hard timeouts, real
-error messages shown to the user), real canvas thumbnail generation, real
-exact-duplicate photo detection by hash, a working confidence formula whose
-ceiling is reachable, a manual-correction picker, and three tabs of polished UI.
+Two fixes are in (a page-scoped promise, then a cross-tab Web Locks request
+around account creation) and it is **narrowed but not closed**. The diagnostic
+now in place records which page load created each account, and it says the two
+accounts in a pair come from *different* page loads — so the lock works, and the
+problem is that the stored session is not surviving, or one navigation is
+producing two documents.
 
-**Simulated, by the prototype's own admission** (its architecture note at lines
-780–830 says so explicitly): the demo "add card" flow's identification is a
-seeded random pick; photo quality scores are randomised within realistic bands
-rather than measured; valuation confidence and recent-sales figures are
-placeholders; leaderboards and tournaments are hardcoded fictional users.
+Full detail, including the query, is in [`HANDOVER.md`](HANDOVER.md) §4a.
 
-The OCR path and the demo path are different code. The OCR path is real.
+### b) The card catalogue has never cached a row
 
-**Does not exist at all:** any backend, any database, any persistence, any
-accounts, any deployment config, any tests, any accuracy measurement, and **any
-AI vision model** (see section 6b).
+`cards: 0`, `card_prices: 0`. Supabase rejects the service-role key held in
+Vercel — the signature of a key rotated in Supabase while Vercel kept the old
+one. Prices still work, because the app falls back to asking tcgapi.dev
+directly. It is a cost and latency problem, not a correctness one.
+
+Needs a person with both dashboards open. Ninety seconds of work, blocked on
+access rather than on code.
+
+---
+
+## 7. Not built
+
+- **Tournaments.** Deliberately not ported: every player and result in the
+  prototype's version is invented, and prize competitions carry real legal
+  exposure. A founder decision.
+- **Per-condition pricing.** Condition is recorded; it does not yet affect value.
+- **A scheduled catalogue sync.** The cache fills opportunistically today.
+- **CI.** See §2.
+
+---
+
+## 8. What this document does not know
+
+The environment these notes were written in cannot reach `api.tcgapi.dev`,
+`supabase.co` over HTTPS, or the deployed site — all three are blocked by
+network egress policy. Supabase was reachable only through a separate
+administrative connection, which is how §4 was checked.
+
+Therefore **not** verified here:
+
+- Any direct call to tcgapi.dev. Its documented `/v1/cards/{id}` endpoint has
+  never returned a verified response to us; the client tolerates two shapes and
+  falls back to `/v1/search`, which *has* been verified, precisely for that
+  reason.
+- The deployed site's current behaviour, by fetching it.
+- Sign-up, sign-in and password-reset round trips. Two real accounts exist in the
+  live database, which is evidence the flow works, but no round trip was
+  observed from here.
 
 ---
 
 ## Correction log
 
-Fixed in this rewrite, with the old claim first:
+**2026-09-14.** This file was rewritten from scratch. The 2026-08-31 version was
+accurate when written and had become wrong in every material respect:
 
-1. "A schema was written; it has never been applied" → **no schema exists in this
-   repo, and none ever has.**
-2. "Backend source code that has never run... whether to keep, adapt or discard
-   it is your call" → **the code is not here; there is nothing to decide about
-   until it is found.**
-3. "`pokai-app.html`, ~3,500 lines" described as the prototype → **the committed
-   file is `index.html`, a different and older build; the bundled one is ahead on
-   three fixes.**
-4. Silent on the "never guess" regression → **now documented as the top code
-   defect.**
-5. Silent on `localhost:3001` → **now documented as the deploy blocker.**
-6. "Nothing is deployed anywhere" stated flatly → **GitHub Pages confirmed off;
-   deployment target moved to Vercel and confirmed to have zero projects.**
-
-Confirmed correct and kept: nothing persists; 22 hardcoded cards; no auth; no
-tests; scanner accuracy never measured; Tesseract fails under strict CSP; camera
-needs HTTPS.
-
----
-
-## 8. Live infrastructure — built and verified 2026-08-31
-
-This section is new because, for the first time, PokAI has infrastructure that
-actually exists.
-
-**Supabase — built, secured, tested.** Project `yycsgtsvkhguzihyxtur`,
-`us-east-2`, Postgres 17, healthy. Eight tables: `card_sets`, `cards`,
-`card_prices`, `sync_runs`, `profiles`, `collections`, `scans`, `corrections`.
-Schema is version controlled in `supabase/migrations/`.
-
-Row-level security is on for every table, and was **verified by experiment
-rather than assumed.** With two users' data really in the database:
-
-| Test | Result |
+| It said | Reality on 2026-09-14 |
 |---|---|
-| Logged-out visitor reads the catalog | allowed — intended, it's public data |
-| Logged-out visitor reads collections and scans | **0 rows** |
-| User A reads collections while user B has data | **only A's own row** |
-| User A writes a row owned by user B | **blocked** |
-
-Supabase's own security linter reported one ERROR and two warnings on my first
-attempt — a view that would have bypassed user permissions, and a signup
-function callable over the public API. Both are fixed and the linter is clean of
-issues originating from this schema. Details in `supabase/README.md`.
-
-The database is currently **empty of real data** — all test rows were deleted.
-
-**Vercel — DEPLOYED 2026-08-31.** Live at `pok-ai-drab.vercel.app`, built from
-`main` of `connorrmm/PokAI`, created through the dashboard after the API route
-failed.
-
-**Build configuration hazard, fixed the same day.** The project was created with
-Framework Preset "Other" and a blank build command, which was correct while the
-repo was a single HTML file. Once the Next.js rebuild merged that setting became
-actively harmful: Vercel would serve files without building, so the API routes
-would not exist, and because `index.html` moved to `public/app.html` the site
-would 404 at the root. `vercel.json` now pins `"framework": "nextjs"`, which
-takes precedence over the dashboard preset. Any project created from this repo
-now builds correctly regardless of how its preset was set.
-
-**Verification status, stated precisely:** I could not load the site. This
-environment's egress proxy blocks `vercel.app`, so both `curl` and a fetch
-returned nothing. What I did verify is that local `main`, remote `main` and the
-commit Vercel built are all `3475d5f`, and that this commit contains every Phase
-0 fix — candidates returned on a low-confidence read, no truncation to 8,
-same-origin backend, retry logic, placeholder art. **So the deployed code is
-correct; whether the deployed page renders is unconfirmed by me** and needs a
-human to open it.
-
-Card lookups will fail on the live site until the API exists. That is expected:
-the app falls back to its 22-card offline pool with generated placeholder art.
-
-Historic note on the tooling, so it is not repeated: creating the project through
-the Vercel API reported success and returned a project id, but the project was
-then invisible to every read — `get_project` 404'd and `list_projects` came back
-empty, while a repeat attempt returned `409 already exists`. Two half-created
-projects (`pokai`, `pokai-app`) may still exist and should be deleted. The
-dashboard import worked first time.
-
-Team `longsterling61-4597's projects`, Hobby plan.
-
-The never-guess blocker is now fixed, so the app is deployable. What is blocking
-is a tooling problem, recorded here so the next session does not repeat it:
-
-Project creation through the Vercel API **reports success and returns a project
-id, but the project is then invisible to every read.** `get_project` returns 404
-for the returned id, and `list_projects` returns an empty array. Attempted twice
-under two names (`pokai`, `pokai-app`); identical result both times. A third
-attempt with the first name returned `409 conflict — project already exists`,
-which contradicts the 404, so at least one half-created project probably exists
-in a scope this tooling cannot enumerate.
-
-**Do not keep retrying this through the API.** It creates orphaned projects. The
-fix is to import the repo through the Vercel dashboard by hand, and to check for
-and delete any stale `pokai` / `pokai-app` projects first.
-
-Repository access was investigated as a cause and ruled out: `connorrmm` is the
-sole collaborator on the repo, and Sterling confirmed he is working from that
-account, so the GitHub side is fine.
-
-**Not built:** the API itself, the sync job, and the vision endpoint. Those are
-Phase 1 and 2 in `docs/ROADMAP.md`.
-
-**Still unverified:** tcgapi.dev. This environment's network policy blocks the
-domain, so despite now holding a key I have not been able to make a single real
-call. Everything in `docs/CATALOG.md` about its endpoints and plans is from
-public pages, not from the API. **Confirming it is the first task of Phase 1.**
-
-## 9. The Next.js rebuild — in progress on a branch
-
-Started 2026-08-31 on `claude/audit-repo-state-a8hhjy`. **Not merged, and must
-not be merged yet.** See the hazard below.
-
-**Done and verified:**
-- Next.js 15 + TypeScript scaffolded. `npx next build` succeeds.
-- The scanner's decision logic is ported into typed modules under
-  `lib/scanner/` — `text.ts`, `confidence.ts`, `rank.ts`, `decide.ts`.
-- **16 tests, all passing**, covering the never-guess rule for the first time
-  in this project's history.
-- `/api/search` proxies tcgapi.dev with the key server-side, with retry and
-  backoff, rate limiting, and honest error text.
-- `/api/health` reports which server config is present, never its values.
-
-**Proof the tests are worth having.** They were checked by deliberately
-reintroducing the two defects that actually shipped — dropping candidates on a
-low-confidence read, and truncating the ambiguous list to 8. Three tests failed
-immediately; restoring the correct code turned them green. A test that cannot
-fail is decoration.
-
-**Proof the API behaves.** Run locally: `/api/health` returned config presence;
-`/api/search` with no query returned 400 with a real message; `/api/search?q=`
-against the (sandbox-blocked) upstream returned the **actual** error —
-`Host not in allowlist: api.tcgapi.dev` — rather than a generic failure, which
-is product rule 4 working. Firing 35 requests produced 29 upstream errors then
-429s, so the limiter trips exactly where configured.
-
-### Routing — '/' is now the rebuild, '/classic' is the original
-
-Changed 2026-08-31 after field testing. The rebuild kept the original app at
-'/' while it was unproven, which was correct at the time and became wrong the
-moment the vision scanner shipped.
-
-The original can only ever run on-device OCR. Anyone opening '/' to scan a card
-was therefore testing precisely the thing that had just been replaced — which
-happened repeatedly during Sterling's testing and cost real time. Being told
-which URL to use did not fix it, because the default was simply wrong.
-
-- `/` — the rebuild, with vision recognition
-- `/classic` — the original single-file app, kept for the portfolio and
-  tournament screens that have not been ported
-- `/preview` — redirects to `/`, so older links still land correctly
-
-*Diagnostic worth remembering:* the two apps are distinguishable by their
-failure text. Only the original says **"Couldn't confidently identify this
-card"**. If that phrase appears, the classic app is being used.
-
-### Merge safety — RESOLVED, this branch is safe to merge
-
-There was a real hazard here and it is now fixed rather than merely documented.
-
-The live site is served as a static `index.html`. Adding `package.json` makes
-Vercel detect a Next.js project, so merging would have stopped serving that file
-and shown the rebuild's placeholder page instead — an immediate, user-visible
-regression.
-
-The fix: the single-file app moved to `public/app.html`, and a `beforeFiles`
-rewrite in `next.config.mjs` keeps `/` serving it. The rebuild lives at
-`/preview` until it is genuinely better. `beforeFiles` runs ahead of the
-filesystem, so it wins over any app-router page.
-
-Verified by running the production build locally: `/` returned 2,740,981 bytes
-titled "Pokai — Prototype", containing the never-guess fix and no truncation;
-`/preview` and both API routes returned 200/400 as expected.
-
-**When the ported UI is ready:** delete that rewrite and add `app/page.tsx`.
-That single change is the cutover, and it is reversible.
-
-Tracked in PR #1 (`https://github.com/connorrmm/PokAI/pull/1`).
-
-**Also ported since:** the OCR pipeline itself — Tesseract worker with its
-character whitelist and single-line page mode, multi-crop strategy with
-inverted-polarity retry and full-frame fallback, canvas preprocessing, Otsu
-thresholding, perceptual hashing — plus the full identification flow and a
-working scan screen at `/preview`.
-
-Verified in a real browser: the page renders with the scan control, and with no
-camera present it surfaces the actual reason — *"Camera unavailable: Requested
-device not found"* — rather than a generic failure.
-
-**Known limitation found while testing:** Tesseract loads its engine and
-language data from a third-party CDN at runtime. Versions are now pinned, and a
-failure surfaces the real reason instead of an uncaught error, but scanning
-still depends on that CDN being reachable. Self-hosting is the fix and is
-costed in `docs/ROADMAP.md` Phase 4.
-
-**Still to port:** portfolio, collection, scan history, tournaments, and the
-reveal animation. The scan path itself is done.
-
-## 10. THE SCANNER WORKS — first successful identification, 2026-09-02
-
-A real Eevee ex, photographed normally on a phone, was identified outright:
-
-> **Identified, 99% confidence — Eevee ex 075/131, SV: Prismatic Evolutions,
-> Double Rare, $5.81**
-
-The model's own description of the photo: *"soft/blurred and the foil texture
-washes out the lower text."* It read the name, HP, ability, attack and
-collector number anyway, and matched the exact print out of five sharing the
-name.
-
-This is the first time in this project's history that a card has been
-identified from a real photograph.
-
-### Measured cost — my estimate was wrong
-
-**$0.0268 per scan** (2,607 input / 551 output tokens, claude-opus-5), 10.2s.
-
-That is **$26.80 per 1,000 scans**, against the ~$12 I estimated in
-`docs/ARCHITECTURE.md`. The estimate was out by more than double, and the
-reason is instructive: output tokens cost 5x input on this model, and the
-551 output tokens are far more than a short structured card record needs.
-Adaptive thinking is on by default on Opus 5, and card reading is an extraction
-task rather than a reasoning one.
-
-Untested levers, in order of likely value: lower `effort`, a shorter `notes`
-field, and a cheaper model. Same-photo comparisons are the way to choose -
-see `docs/ROADMAP.md`.
-
-### What made it work
-
-Two changes, both driven by real scans rather than reasoning:
-
-1. **Number and set together resolve a print.** Every print shares the card
-   name, so name score can never break the tie, and three different cards carry
-   075/131. Their intersection leaves exactly one.
-2. **Only signals the model is SURE of may resolve it.** An earlier scan
-   reported the number as *"tentative rather than confirmed"* and the set as
-   *"inferred from the artwork rather than a clearly legible set symbol"*.
-   Treating those as facts would have auto-accepted one of three cards priced
-   $5.81, $8.86 and $26.76. The model now reports per-field certainty and only
-   signals above 80 may identify a card outright.
-
-The second is the more important lesson: the model was already telling us how
-sure it was, in prose, and the code ignored it. Asking for that certainty as
-structured data turned an overconfident guess into a correct answer.
-
-## 11. The billing trap — resolved 2026-09-02
-
-**Kept because it will happen again to somebody.** For one evening the vision
-scanner could not complete a single scan, purely because the API refused every
-request with `Your credit balance is too low`. It was never a code problem.
-
-### The billing trap that cost the evening
-
-Sterling bought **$40 of "usage credits" on his Claude Max subscription**. Those
-are for the Claude *app* when it hits a plan limit. **The API cannot spend
-them.** API usage needs separate prepaid credit bought at
-**console.anthropic.com**, which is a different product with a different
-balance on a different site.
-
-The tell: the subscription screen says *"keep using Claude if you hit a plan
-limit"* and shows a reset date. API credit is a plain dollar balance with no
-plan or reset.
-
-**The fix was:** buy API credit at console.anthropic.com (\$5 is ~400 scans).
-Done on 2026-09-02; scanning has worked since. No code change was needed.
-
-Sterling is also asking Anthropic support whether the \$40 can be transferred
-or refunded. That is unresolved and does not block anything.
-
-### What was confirmed working at that point
-
-| | |
-|---|---|
-| Supabase schema, RLS tested three times | ✅ |
-| tcgapi.dev connected, key live, returns real data | ✅ |
-| Scanner ported, 26 tests passing | ✅ |
-| Vision endpoint built, wired, key valid and authenticating | ✅ |
-| Deployed at `pok-ai-drab.vercel.app` | ✅ |
-
-The vision key IS valid — the API authenticated it and rejected only on
-balance. That is the last thing proven before stopping.
-
-### Bugs found by field testing on a real phone, all in one evening
-
-None were findable from the development environment, and every one passed the
-full test suite:
-
-1. **Build preset** — the project was configured as a static site, so merging
-   the rebuild would have served no site at all. Fixed by pinning
-   `framework: nextjs` in `vercel.json`.
-2. **Dropped guided crop** — the port sent the whole camera frame, so OCR read
-   the wall behind the card rather than the card.
-3. **Broken API contract** — the new `/api/search` shape silently degraded the
-   live app to "Unknown Set" with no card art.
-4. **Wrong page** — three test rounds ran against the original OCR app because
-   it was still served at `/`. Fixed by making the rebuild the default.
-5. **Masked API key** — a key copied out of Vercel's own display is dots, not a
-   key, and produced an unreadable ByteString error.
-
-**The lesson worth keeping:** 26 unit tests passed throughout every one of
-these. They test the pieces; all five failures were in the seams between
-pieces, or in the environment. Field testing on a real device found what the
-test suite structurally could not.
-
-## 12. Where to resume — 2026-09-02, end of day
-
-Verified against commit on branch `claude/audit-repo-state-a8hhjy`.
-
-### What changed today
-
-- **API credit bought — the scanner works end to end.** First correct
-  identification: Eevee ex 075/131 at 99%.
-- **Model settled by measurement, not opinion.** All four candidates were run
-  on the same photo (`/compare`). All four got it right. Haiku 4.5 is now the
-  default: **5x cheaper than Opus with no accuracy loss on this task.**
-- **First labelled accuracy set built** — six of Sterling's real cards, ground
-  truth recorded in `docs/ACCURACY-SET.md`.
-
-### What run 01 found, and what it does not yet prove
-
-Six cards. **Zero confidently wrong answers** — the never-guess rule held on
-every one. But **zero auto-accepts** either: every scan asked the user, one
-with a fifty-card list.
-
-**One cause, on all six: the collector number was never read.** Every scan
-reported 0% number certainty. Without a number no print resolves uniquely, so
-everything falls back to a list. Partly self-inflicted — downscaling to 1400px
-for cost left the digits a few pixels tall.
-
-**The fix is written but NOT verified against real cards.** The scanner now
-sends a magnified crop of the card's bottom edge, taken from the original photo
-before downscaling. It compiles, typechecks, and 36 tests pass. That proves
-nothing about whether a phone camera can now read a collector number.
-
-**Next action: redeploy and rescan the same six cards.** Compare number
-certainty and candidate counts against the run-01 table. If certainty is still
-0%, revert the strip rather than pay ~$1.50 per 1,000 scans for nothing.
-
-### Two questions only Sterling can answer
-
-1. **Was the correct Kangaskhan ex (`040/A063`) in its 22-card list?** If it was
-   not, that is a catalog gap, which is a different and more serious problem
-   than a tuning issue.
-2. **Does PokAI support Japanese cards?** The JP Mega Greninja was misread as
-   *"Kyogre-ex"* and returned zero results. Zero results is safe, but if
-   Japanese cards are in scope this needs a data source that carries them.
-
-### Known costs at today's measurements
-
-| | |
-|---|---|
-| Per scan, before the bottom strip | $0.0035 (**$3.50 / 1,000**) |
-| Per scan, projected with the bottom strip | ~$0.005 (**$5 / 1,000**) |
-| Time per scan | 4.6s |
-| Vercel Pro, needed before commercial launch | $20/mo |
-| tcgapi.dev Pro | $49.99/mo |
-
-### Still not built
-
-Portfolio, collection, scan history, tournaments, reveal animation. Rate
-limiting is per-instance and needs shared storage before real traffic.
-
-## 13. Where to resume — 2026-09-03, end of day
-
-**The scanner works on a real phone.** That sentence was not true this morning.
-
-### What it does now
-
-| | |
-|---|---|
-| Identifies a card outright | **yes** — Kangaskhan ex `190/165`, Froakie `088/086` |
-| Reads collector numbers correctly | yes, on full-arts and secret rares |
-| Cost | ~$0.0076 a scan (**~$7.60 / 1,000**) |
-| Time | 4–6s |
-| Camera | 2160p, best of 6 frames, automatic light when a frame is weak |
-| Look | the prototype's design, restored |
-
-### What was wrong, and what fixed it
-
-Six things, in the order they were found. Every one was found by scanning real
-cards on a real phone; none was findable from the development environment.
-
-1. **The camera captured at 1080p**, making a collector number ~21px tall
-   before any processing. Now 2160p, ~44px.
-2. **The upload downscaled to 1400px**, destroying what was left. Now a
-   magnified crop of the card's corners is sent alongside, ~83px.
-3. **The full-width bottom strip** spent its pixels on rule-box text. Cropping
-   to the corners roughly doubled the digits again.
-4. **Frame choice was whatever instant the finger landed on.** Now six frames
-   are scored for sharpness and glare and the best is kept.
-5. **A ranking signal could identify a card.** Fixed and regression-tested; see
-   the entry below.
-6. **The camera preview was black on iOS.** The stream was attached inside a
-   `requestAnimationFrame` that races React's commit. Now an effect.
-
-### The one serious defect, and what it cost
-
-A foil-pattern signal added to improve *ranking* was able to reorder the list
-after the identifying step had already run, so the app displayed a $0.76 card
-in place of a $7.43 one at 99% confidence. **The first confidently wrong answer
-of the project** — the exact failure rule 1 exists to prevent.
-
-It was possible because the ranking logic lived inside an HTTP route handler
-and could not be tested; 60 tests passed throughout. **That is the same root
-cause this file records for the original single-file build.**
-
-It now lives in `lib/scanner/resolve.ts` as a pure function whose structure
-enforces the rule: **weak signals rank, strong signals identify, ranking runs
-first and identifying last**, plus an invariant that withdraws the claim if the
-card at the front is not one the evidence points at. 66 tests.
-
-### Later the same evening: the set passed
-
-After the iOS camera fix, all six cards were rescanned. **Five of five English
-cards identified outright**, and the Japanese Mega Greninja correctly found no
-match rather than guessing at an English print — the best available outcome on
-the one card built to break the never-guess rule.
-
-That supersedes the "plain rares do not work" finding below: Flareon and Dipplin
-both identified. The black camera preview had been masking how much the earlier
-fixes achieved.
-
-### What is NOT proven
-
-- ~~Why Flareon passed~~ — **resolved 2026-09-04. It does not.** Rescanned: the
-  number read `013/131` at 95%, and the app correctly offered the four prints
-  carrying it rather than naming one. The 5/5 figure came from a verbal report
-  and was wrong; the real result is **4 of 5 identified, Flareon correctly
-  offering four indistinguishable prints, Japanese card correctly declining.**
-  The confidently-wrong fix holds.
-- **The foil-pattern signal.** One observation, and it returned `unknown`.
-- **Sample size is seven cards.** A promising signal, not a measurement.
-- **Angle.** "At a steep angle" appeared twice. Nothing corrects for it.
-
-### Next session, in order
-
-1. **Make a scan go somewhere.** `lib/supabase/` is empty: nothing in the app
-   has ever touched the database, so an identified card is forgotten the moment
-   it is shown. The schema and RLS have been built and tested since 2026-09-01
-   and are entirely unused. Sign-in, save to collection, collection view.
-2. Attack perspective, the untouched failure mode.
-3. Then judge the foil-pattern signal on real evidence.
-4. Port the remaining screens: portfolio, collection, scan history, tournaments.
-
-Full run-by-run detail, including every measurement quoted here, is in
-`docs/ACCURACY-SET.md`.
-
-## Rules for whoever edits this file next
-
-1. Date it and name the commit you verified against.
-2. Every claim is "verified", "not verified", or "could not check — here's why."
-   There is no fourth category, and "the code looks right" is not verification.
-3. Never delete a caveat to make the picture look better. That is how this file
-   became wrong the first time.
-
-## 14. The catalog was never filled — found 2026-09-04
-
-**Saving a card had never worked once.** `collections` had zero rows.
-
-`cards` was empty, and `collections.card_id`, `scans.chosen_card_id` and both
-`corrections` card columns carry foreign keys to it. Every "Add to my
-collection" failed with `foreign_key_violation`. Proven against the live
-database rather than reasoned about:
-
-| | |
-|---|---|
-| save with an empty catalog | **BUG REPRODUCED: foreign_key_violation** |
-| save after caching the card | SUCCEEDS |
-| scan history insert | SUCCEEDS |
-| price reaching `card_prices_latest` | 12.34 |
-
-`card_prices` was empty too, so even had saving worked, every card would have
-read "Value unavailable" forever and the portfolio total would have been $0
-regardless of what anyone owned.
-
-CLAUDE.md settled this on 2026-08-31: *"Card data is cached in our own database
-and refreshed on a schedule."* The cache was designed, the migrations were
-written, the RLS was tested — and nothing ever wrote a row into it.
-
-**Fix:** `lib/catalog.ts`, called from inside `searchCards()`. Every card
-lookup in the app funnels through that one function, so the catalog now fills
-itself as people scan. Placed there rather than at the point of saving for two
-reasons: no future code path can forget it, and it never trusts the browser —
-the rows written are the provider's answer to our server, not whatever a client
-posted.
-
-The licence permits precisely this (*"storage is fine, redistribution is
-not"*), and migration 0004 already revoked catalog access from `anon` and
-`authenticated`, so these rows cannot be served onward.
-
-### How it was missed
-
-Sign-in worked, the page rendered, the API returned real errors, 66 tests
-passed, and the build was clean. **Nothing exercised the write path against a
-real database.** The same shape as every other defect in this file: the pieces
-were right and the seam between them was never tried.
-
-Also fixed in the same pass:
-
-- **`auto_accepted` was inferred by comparing card ids**, so tapping the first
-  row of a never-guess candidate list recorded as "identified outright". The
-  app would have counted its own unanswered questions as successes, inflating
-  the very accuracy signal the feature exists to measure. Now passed
-  explicitly from the outcome.
-- **A non-OK response from the scan log was discarded without a warning**, so a
-  100% failure rate was invisible in the browser console.
-- **The history page had no loading state**, showing a bare header while
-  fetching and permanently if a response arrived without `items`.
-
-### Eight more defects, found by reviewing code that shipped unreviewed
-
-The auth, collection and portfolio work went in without a review pass. It had
-eight defects, four of them user-visible. Fixed 2026-09-04.
-
-**A fabricated crash, in the code whose comment claimed to prevent one.** The
-portfolio skipped writing a snapshot when no price could be found — but still
-compared today's $0.00 against a real earlier baseline, so a run where prices
-failed to load would have displayed *"▼ down $480.00 (100%)"*. Product rule 2,
-broken by the exact code written to uphold it: skipping the write was not
-enough, the comparison had to be skipped too. The page now says plainly that no
-prices are available and that the total is not a valuation.
-
-**The save button could never appear.** If `getSession()` rejected — a lock
-timeout, storage blocked in private browsing — `ready` stayed false forever,
-`AddToCollection` rendered `null`, and there was nothing on screen to say why.
-
-**Adding a card was a read-modify-write**, so two quick taps raced and lost an
-increment. Migration 0007 adds a unique index and an atomic function. Verified
-on the live database: two saves collapse to one row at quantity 2, the same
-card in a different condition stays a separate holding (MVP item 9), and
-another signed-in user sees zero rows. Test data removed.
-
-**Fifty price rows per scan.** A Flareon search returns fifty cards, and each
-was appended to `card_prices` unconditionally — the same measurement recorded
-over and over, making `card_prices_latest` sort through ever more duplicates
-for the same answer. Now only an observation that differs from the one already
-held is written.
-
-Also: catalog read errors were discarded, turning a broken service-role read
-into a silent $0.00 portfolio with a 200 status; a missing service-role key
-degraded to an unpriced collection instead of saying so; `sinceLabel` mixed
-local time with UTC-midnight parsing, so after midday UTC yesterday was
-labelled "2 days ago"; and `Number(null)` is `0`, so a malformed request became
-a 500 with a raw Postgres message instead of the 400 already written for it.
-
-**The pattern is the same one this file keeps recording.** Every one of these
-passed 66 tests, a clean typecheck and a clean build. None was findable without
-either reading the code adversarially or running it against a real database.
-
-## 15. Anonymous sign-ins, and the spend they exposed — 2026-09-04
-
-Anonymous sign-ins were enabled so the app needs no email. Supabase warns about
-two things on that screen. Both were checked rather than assumed.
-
-### 1. Anonymous users get the `authenticated` role — policies audited, clean
-
-Every policy on every table, read from the live database:
-
-| Table | Policies | Rule |
-|---|---|---|
-| collections, scans, corrections, portfolio_snapshots, scan_usage | select / insert / update / delete | `auth.uid() = user_id` |
-| profiles | select / insert / update | `auth.uid() = id` |
-
-**No policy grants blanket access to `authenticated`.** An anonymous account is
-therefore confined to its own rows exactly like any other. The catalog tables
-(`cards`, `card_prices`, `card_sets`) have RLS on with **no policies at all**
-and their grants revoked, so they remain unreadable to both roles — the licence
-lockdown from migration 0004 holds.
-
-### 2. The cost warning was right, and pointed at something worse
-
-`/api/identify` **required no authentication at all.** Its only control was an
-in-memory per-IP counter, which on Vercel means per serverless instance and
-resets on every cold start — `lib/rate-limit.ts` said so in its own comment and
-it was never revisited. Anyone with the URL could spend the project's Anthropic
-credit, and had been able to for as long as it has been deployed.
-
-Anonymous sign-ins did not create that hole. They make it scriptable, which is
-exactly why Supabase recommends CAPTCHA alongside them.
-
-**Fixed, in the half that belongs in our code:**
-
-- **Scanning now requires a session.** Costs legitimate users nothing, because
-  the app signs everyone in anonymously on open — there is nobody to shut out.
-- **A durable daily cap of 300 scans per account** (migration 0008), counted in
-  the database so it holds across every instance and survives cold starts.
-  Counted BEFORE the model runs, because the point is not to spend the money.
-  At ~$0.0078 a scan that bounds one account to about $2.34 a day.
-- **Fails closed.** If usage cannot be counted, the scan does not run. Scanning
-  anyway is how a capped service quietly becomes an uncapped one.
-- Generous on purpose: photographing a binder is a legitimate few hundred
-  scans, and stopping a real collector mid-binder is a worse failure than a few
-  dollars.
-
-Verified against the live database: two calls returned 1 then 2, attributed to
-the calling user; test rows deleted.
-
-### Still open, and it is Sterling's to decide
-
-**CAPTCHA on anonymous sign-ins.** The cap bounds one account. Nothing yet
-bounds how many accounts a script can create, and each new one gets its own
-300. Supabase supports hCaptcha and Cloudflare Turnstile; both have free tiers.
-Worth doing before the URL is public anywhere.
+| "The entire repository is two files" | ~60 source files, a Next.js app |
+| No build step, package manager, or tests | All present; 148 tests |
+| "Nothing is deployed with a working backend" | Live and working in production |
+| "Nothing saves between page loads" | Collections persist in Postgres |
+| "tcgapi.dev has never been successfully called" | It is pricing real cards |
+| Open defect at `index.html` line 2148 | That file is no longer the product |
+
+The lesson worth keeping: a status document that goes stale is worse than none,
+because it is trusted. Anyone landing here in another six months should check
+the verification date first and distrust everything if it is old.

@@ -1,72 +1,119 @@
 # PokAI
 
-Pokémon card scanning and collection platform. Point a phone at a card, know
-exactly which card it is, what it's worth, and track it in a collection.
+Point a phone at a Pokémon card. Know exactly which card it is, what it's
+worth, and keep it in a collection that follows you.
 
 **SCAN → KNOW → TRACK → GROW**
 
-## Status
+Live: **https://pok-ai-drab.vercel.app**
 
-Early prototype. Nothing is deployed with a working backend, and nothing saves
-between page loads.
+---
 
-**Read [`docs/STATUS.md`](docs/STATUS.md) before trusting anything else in this
-repository.** It is verified against the actual code and says plainly what was
-checked, what wasn't, and why.
+## Status: working, in private testing
 
-## What's here
+This is a deployed application, not a prototype. Scanning, pricing, collections
+and the portfolio all work end to end against real data.
+
+It has **two known defects** and a short list of things not built yet. Both are
+written down in [`docs/STATUS.md`](docs/STATUS.md), with the evidence. Read that
+before you trust anything else here — including this file.
+
+If you are the new developer, start with
+[`docs/HANDOVER.md`](docs/HANDOVER.md). It gets you running locally in about ten
+minutes and tells you what to be careful of.
+
+---
+
+## What it does today
+
+| | |
+|---|---|
+| **Scan** | Camera capture at 2160p, auto-shutter when the frame is sharp, then a vision model identifies the card |
+| **Never guesses** | Below the confidence bar it shows every matching print and asks. This is enforced by code and by tests, not by convention |
+| **Prices** | Live market prices from tcgapi.dev, sourced from TCGplayer |
+| **Collection** | Cards save to your own account. Row-level security means nobody can read anyone else's |
+| **Portfolio** | Total value, rarity breakdown, collection score, achievements, and value history recorded on each visit |
+| **Accounts** | Scanning needs no sign-up. Email and password can be added later, and the collection comes with it |
+
+## The four rules
+
+These are product decisions, not implementation preferences. They came from real
+users. Do not trade them away for convenience.
+
+1. **Never guess a card.** Below the auto-accept threshold, show every matching
+   print and let the user choose. A confident wrong answer destroys trust far
+   worse than a question does.
+2. **Never fabricate a price.** If live data is unavailable, say so. No
+   estimates, no interpolation, no stale number dressed up as current.
+3. **Never invent card data.** Names, sets, numbers and rarities come from a real
+   card database. If a lookup fails, surface the failure.
+4. **Show the real error.** Never "something went wrong." This project has lost
+   days — repeatedly — to errors that hid their own cause.
+
+`__tests__/never-guess.test.ts` exists to keep rule 1 honest. It has 75 cases.
+
+## Stack
+
+- **Next.js 15** (App Router) + React 19 + TypeScript, on **Vercel**
+- **Supabase** — Postgres 17, auth, row-level security
+- **tcgapi.dev** — card catalogue and prices (which sources pricing from TCGplayer)
+- **Claude Haiku 4.5** — vision, for recognising the card
+- **Vitest** — 148 tests
+
+## Layout
 
 ```
-index.html                        the prototype — the whole app, one file
-prototype/pokai-app-bundled.html  a NEWER build than index.html (see STATUS.md §2)
-supabase/migrations/              live database schema (applied 2026-08-31)
-CLAUDE.md                         project rules and context for Claude Code
-docs/STATUS.md                    what actually exists — start here
-docs/PRODUCT.md                   vision, MVP scope, the "never guess" rule
-docs/SCANNER.md                   recognition pipeline findings
-docs/CATALOG.md                   card database strategy
-docs/OPEN-QUESTIONS.md            decisions still to be made
-docs/ARCHITECTURE.md              the stack and why — read before building
-docs/ROADMAP.md                   build order to production
-docs/SETUP-CHECKLIST.md           accounts and keys Sterling needs to create
-docs/MODEL-POLICY.md              which AI model to use for which work
-.claude/agents/                   Sonnet-pinned helper agents
+app/                    pages and API routes
+  api/identify          scan → card
+  api/search            card lookup
+  api/collection        a user's cards
+  api/portfolio         value, history, score
+  api/scans             scan history
+  api/health            configuration and build diagnostics
+components/             the UI
+lib/
+  scanner/              recognition: cropping, OCR, ranking, confidence
+  supabase/             two clients — as-the-user, and service-role
+  tcgapi.ts             the card database client (server only)
+  portfolio.ts          valuing a collection
+supabase/migrations/    the live database schema, 0001–0009
+__tests__/              148 tests
+docs/                   see below
+prototype/              the original single-file app, kept for reference only
 ```
+
+## Docs
+
+| File | Read it when |
+|---|---|
+| [`docs/HANDOVER.md`](docs/HANDOVER.md) | **You are new. Start here.** |
+| [`docs/STATUS.md`](docs/STATUS.md) | You want to know what is real and what is broken |
+| [`docs/PRODUCT.md`](docs/PRODUCT.md) | You are making a product decision |
+| [`docs/SCANNER.md`](docs/SCANNER.md) | You are touching recognition — **expensive findings live here** |
+| [`docs/CATALOG.md`](docs/CATALOG.md) | You are touching card data, prices, or the licence |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | You want to know why the stack is the stack |
+| [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md) | Decisions the founders still owe |
 
 ## Running it
 
-No build step, no dependencies to install. Serve the folder over HTTP:
-
 ```bash
-python3 -m http.server 8000
-# then open http://localhost:8000/index.html
+npm install
+cp .env.example .env.local     # then fill it in — see docs/HANDOVER.md
+npm run dev
 ```
 
-Do not open `index.html` as a `file://` URL — the camera needs HTTPS or
-localhost, and OCR will not start.
+```bash
+npm test          # 148 tests
+npm run typecheck
+npm run build
+```
 
-Card lookups will fail until a backend exists at `http://localhost:3001`; the app
-falls back to a 22-card offline pool. That's expected, not a bug in the page.
+## A warning about keys
 
-## Where this is going
+**This repository is public.** Every paid key lives in Vercel's environment
+variables and is read server-side only. The browser never calls a third-party
+API directly — it calls our API, and our API holds the keys.
 
-The plan to production is in [`docs/ROADMAP.md`](docs/ROADMAP.md); the stack and
-the reasoning behind it are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-Short version: Vercel hosts the app and a small serverless API, Supabase holds
-the database and accounts, tcgapi.dev supplies card data and prices on a
-scheduled refresh, and a server-side vision model replaces the current OCR. About
-$70/month to run at launch, plus a few dollars per thousand scans. $0 while
-building.
-
-**The database is built.** Supabase schema is live and row-level security is
-verified — see [`supabase/README.md`](supabase/README.md). Nothing is deployed
-yet.
-
-## Two things to know before changing anything
-
-1. **The committed `index.html` is an older build** than
-   `prototype/pokai-app-bundled.html`. Reconcile them before building on either.
-2. **The committed build violates the project's number-one product rule** by
-   showing no candidate list on a low-confidence scan. Details in
-   `docs/STATUS.md` §2.
+`SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security completely. It is used
+for exactly one thing: reading the card catalogue, which is server-only for
+licence reasons. It must never reach client code, a commit, or a chat window.

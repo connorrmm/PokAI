@@ -1,5 +1,10 @@
 # Roadmap to production
 
+> **Note, 2026-09-14.** Phases through "deployable front end" are complete and
+> marked below. The app is live, scanning, pricing and saving collections. See
+> `docs/STATUS.md` for verified current state and `docs/HANDOVER.md` for what to
+> pick up next.
+
 Written 2026-08-31. Ordered by dependency, not by preference — each phase
 unblocks the next. Time estimates are working time, not calendar time.
 
@@ -12,15 +17,16 @@ do is in `docs/SETUP-CHECKLIST.md`.
 
 Can start immediately; nothing here is blocked on Sterling.
 
-1. **Fix the never-guess violation.** The committed app shows no candidate list
-   on a low-confidence scan and truncates to 8 when ambiguous. The correct
-   version already exists in `prototype/pokai-app-bundled.html`. Port it.
-2. **Reconcile the two app versions** into one file, keeping the retry logic and
-   placeholder art that were written but never committed.
-3. **Make the backend address configurable** instead of hardcoded to
-   `http://localhost:3001`, which cannot work on a deployed site.
+1. ~~**Fix the never-guess violation.**~~ **DONE.** Rebuilt in
+   `lib/scanner/resolve.ts`, which now enforces the ordering structurally, with
+   75 tests against it.
+2. ~~**Reconcile the two app versions.**~~ **DONE.** Superseded entirely: the
+   product is now a Next.js application. Both prototypes are reference only.
+3. ~~**Make the backend address configurable.**~~ **DONE.** There is no separate
+   backend; the API is served from the same deployment.
 
-**Result:** one honest, deployable front end. Still no persistence.
+**Result:** achieved, and then some — the app is deployed, and collections
+persist in Postgres.
 
 ---
 

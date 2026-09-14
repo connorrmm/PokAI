@@ -1,5 +1,11 @@
 # Recognition pipeline — findings
 
+> **Note, 2026-09-14.** This document predates the rebuild. References to
+> `index.html` describe the original single-file prototype, which is no longer
+> the product — it is preserved at `prototype/pokai-app-bundled.html`. The
+> FINDINGS below still hold and are still worth reading; the file and line
+> numbers do not. See `docs/STATUS.md` for what exists now.
+
 These are results from building and debugging a working prototype scanner. They
 are **findings, not specifications.** Where a number appears, the reasoning
 behind it matters more than the number. If you can design something better,

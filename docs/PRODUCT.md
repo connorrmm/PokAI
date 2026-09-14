@@ -37,11 +37,21 @@ Being wrong feels like a broken one.
 A dead-end error is also unacceptable. "Couldn't read that card" with no options
 is a failure. Showing candidates is always better than showing nothing.
 
-**The committed app currently breaks this rule.** On a low-confidence read it
-shows exactly the dead end described above, and on an ambiguous read it truncates
-the candidate list to 8. Verified 2026-08-31 at `index.html` lines 2148 and 2150.
-The correct behaviour already exists in `prototype/pokai-app-bundled.html`. This
-is the highest-priority code defect on the project — see `docs/STATUS.md`.
+**This rule was broken once, and the shape of the break is worth remembering.**
+
+The original prototype hit the dead end above on a low-confidence read and
+truncated the candidate list to 8 when ambiguous. That was fixed in the rebuild.
+
+Then it broke again, differently and more dangerously: ranking by foil pattern
+ran *after* the step that decided a card was identified, so the app showed one
+card, at 100% confidence, at the wrong price — $0.76 against a real $7.43. Every
+test passed at the time.
+
+`lib/scanner/resolve.ts` now enforces the ordering structurally — **weak signals
+rank, strong signals identify, ranking runs first** — and
+`__tests__/never-guess.test.ts` holds 75 cases against it. Preserve that
+property. The rule is not defended by good intentions; it is defended by the
+order those steps run in.
 
 ## Tier 1 MVP
 
