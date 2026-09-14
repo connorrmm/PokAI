@@ -37,6 +37,9 @@ npm run typecheck
 npm run build
 ```
 
+Those last three are exactly what CI runs on every pull request, in that order,
+with an empty environment. If they pass locally they will pass there.
+
 If `npm run dev` starts but the app says sign-in is unavailable, your two
 `NEXT_PUBLIC_` variables are missing — and note that those are compiled into the
 bundle, so you must restart `dev` after changing them.
@@ -192,7 +195,11 @@ service-role key from Supabase into the existing Vercel variable, redeploy.
 - **A scheduled catalogue sync.** The cache fills opportunistically as cards are
   searched. tcgapi.dev refreshes prices daily, so a nightly job would match their
   cadence — see `CATALOG.md`.
-- **CI.** 148 tests and nothing runs them automatically. This should be first.
+- **Branch protection.** CI now runs on every pull request
+  (`.github/workflows/ci.yml`: no committed credentials, typecheck, tests,
+  build) — but GitHub will not *block* a merge on a failing check until someone
+  with admin rights turns on branch protection for `main`. Until then CI is
+  advice, not a gate.
 
 ---
 

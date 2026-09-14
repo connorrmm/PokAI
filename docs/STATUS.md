@@ -55,9 +55,15 @@ Yes. All three, on 2026-09-14:
 | Types | `npm run typecheck` | clean |
 | Build | `npm run build` | compiled successfully |
 
-**There is no CI.** Nothing runs any of the above automatically on a push or a
-pull request. This is the single cheapest gap to close and should be closed
-before a second developer commits.
+**CI runs all of the above** on every push to `main` and every pull request
+(`.github/workflows/ci.yml`), plus a check that no credential-shaped value has
+been committed. It needs no secrets: the tests stub every network call and the
+build does not require the API keys, both verified by running them with a
+completely empty environment.
+
+**What CI does not yet do is BLOCK a merge.** That needs branch protection
+enabled on `main` in the GitHub repository settings, which requires an admin.
+Until then a red check is a warning, not a gate.
 
 **How this was verified:** all three commands were run.
 
@@ -167,7 +173,7 @@ access rather than on code.
   exposure. A founder decision.
 - **Per-condition pricing.** Condition is recorded; it does not yet affect value.
 - **A scheduled catalogue sync.** The cache fills opportunistically today.
-- **CI.** See §2.
+- **Branch protection.** CI exists; making it enforcing is a GitHub setting. See §2.
 
 ---
 

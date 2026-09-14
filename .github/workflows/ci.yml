@@ -1,0 +1,65 @@
+name: CI
+
+# Every push to main, and every pull request. A check that only runs on main
+# tells you about a break after it has already landed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run pointless. Cancel it
+# rather than queue behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: typecheck, tests, build
+    runs-on: ubuntu-latest
+    # Generous, but the whole job runs in about a minute. This is here to catch
+    # a hang, not to rush anything.
+    timeout-minutes: 10
+
+    # NO SECRETS ARE NEEDED, and none are granted. The test suite stubs every
+    # network call, and the build does not require the API keys -- both were
+    # verified by running them with a completely empty environment. This is
+    # deliberate: a CI job holding production keys is a CI job that can leak
+    # them, and on a public repository forked pull requests would run here too.
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The secret check greps the tree; it does not need history.
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ci, not install: it installs exactly what package-lock.json pins and
+      # fails if the lockfile and package.json disagree. A dependency that
+      # silently drifts on CI is a build you cannot reproduce locally.
+      - name: Install
+        run: npm ci
+
+      # First, because it is the fastest way to fail and needs no build.
+      - name: No committed credentials
+        run: ./scripts/check-no-secrets.sh
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # These defend the two product rules that matter most: never guess a card,
+      # never fabricate a price. If this step fails, the fix is the code, never
+      # the test -- see docs/PRODUCT.md before changing anything here.
+      - name: Tests
+        run: npm test
+
+      # Last, because it is the slowest, and because a type error or a failing
+      # test is a more useful thing to be told about first.
+      - name: Build
+        run: npm run build

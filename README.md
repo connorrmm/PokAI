@@ -108,6 +108,9 @@ npm run typecheck
 npm run build
 ```
 
+CI runs those three plus a committed-credential check on every pull request.
+It needs no secrets.
+
 ## A warning about keys
 
 **This repository is public.** Every paid key lives in Vercel's environment

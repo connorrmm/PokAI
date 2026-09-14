@@ -22,7 +22,14 @@
    start, which was fine for a prototype. With a shareholder and an outside
    developer it is a deliberate decision, not a default.
 
-4. **Turnstile (optional, anti-abuse).** Site key → Vercel, secret → Supabase,
+4. **Turn on branch protection for `main`** (GitHub → Settings → Branches).
+   CI now runs on every pull request, but GitHub will not stop a failing change
+   being merged until this is on. Require the "typecheck, tests, build" check to
+   pass. Two minutes, needs repository admin. This is what turns the tests
+   defending "never guess a card" from documentation into something that
+   physically blocks a bad merge.
+
+5. **Turnstile (optional, anti-abuse).** Site key → Vercel, secret → Supabase,
    in that order. Until the site key is set the captcha code is inert.
 
 ---
