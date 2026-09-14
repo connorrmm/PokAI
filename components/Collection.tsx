@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import Account from './Account';
+import NothingYet from './NothingYet';
 import { useSession } from './Auth';
 
 interface Item {
@@ -52,12 +52,10 @@ export default function Collection() {
 
   if (!session) {
     return (
-      <div>
-        <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 0 }}>
-          Sign in to keep the cards you scan. Your collection is yours — nobody else can read it.
-        </p>
-        <Account isAnonymous={false} />
-      </div>
+      <NothingYet
+        title="No cards yet"
+        body="Scan a card and tap “Add to my collection”. No sign-up needed — your collection is private to you from the first card."
+      />
     );
   }
 

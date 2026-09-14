@@ -21,7 +21,7 @@ vi.mock('@/lib/supabase/browser', () => ({
 }));
 vi.mock('@/lib/captcha', () => ({ captchaToken: async () => null }));
 
-/** A Supabase auth client with only the calls ensureSession makes. */
+/** A Supabase auth client with only the calls ensureAccount makes. */
 function fakeClient(opts: { stored?: unknown; fail?: string } = {}) {
   let signIns = 0;
   return {
@@ -43,12 +43,12 @@ function fakeClient(opts: { stored?: unknown; fail?: string } = {}) {
 
 beforeEach(() => vi.resetModules());
 
-describe('ensureSession', () => {
+describe('ensureAccount', () => {
   it('creates ONE account when five components ask at once', async () => {
-    const { ensureSession } = await import('@/components/Auth');
+    const { ensureAccount } = await import('@/components/Auth');
     const sb = fakeClient();
-    const sessions = await Promise.all(
-      Array.from({ length: 5 }, () => ensureSession(sb as never)),
+    const sessions: (unknown)[] = await Promise.all(
+      Array.from({ length: 5 }, () => ensureAccount(sb as never)),
     );
     expect(sb.signIns()).toBe(1);
     // And everyone got the same one, so every component saves to one account.
@@ -57,21 +57,21 @@ describe('ensureSession', () => {
   });
 
   it('never signs in when a session is already stored', async () => {
-    const { ensureSession } = await import('@/components/Auth');
+    const { ensureAccount } = await import('@/components/Auth');
     const sb = fakeClient({ stored: { access_token: 'existing' } });
-    await Promise.all([ensureSession(sb as never), ensureSession(sb as never)]);
+    await Promise.all([ensureAccount(sb as never), ensureAccount(sb as never)]);
     expect(sb.signIns()).toBe(0);
   });
 
   it('lets a later mount retry after a failure', async () => {
     // A rejected promise kept forever would mean one bad moment at startup
     // left the app permanently unable to sign anyone in.
-    const { ensureSession } = await import('@/components/Auth');
+    const { ensureAccount } = await import('@/components/Auth');
     const failing = fakeClient({ fail: 'Anonymous sign-ins are disabled' });
-    await expect(ensureSession(failing as never)).rejects.toThrow('Anonymous sign-ins are disabled');
+    await expect(ensureAccount(failing as never)).rejects.toThrow('Anonymous sign-ins are disabled');
 
     const working = fakeClient();
-    await expect(ensureSession(working as never)).resolves.toMatchObject({ access_token: 'token-1' });
+    await expect(ensureAccount(working as never)).resolves.toMatchObject({ access_token: 'token-1' });
     expect(working.signIns()).toBe(1);
   });
 });
@@ -84,7 +84,7 @@ describe('ensureSession', () => {
  * production the burst of accounts per page load fell from six to two rather
  * than to one, which is what that looks like from the outside.
  */
-describe('ensureSession across module copies', () => {
+describe('ensureAccount across module copies', () => {
   it('shares one sign-in with a second copy of the module on the same page', async () => {
     const g = globalThis as unknown as { window?: unknown };
     const hadWindow = 'window' in g;
@@ -97,7 +97,7 @@ describe('ensureSession across module copies', () => {
       const b = await import('@/components/Auth');
       expect(a).not.toBe(b);
 
-      await Promise.all([a.ensureSession(sb as never), b.ensureSession(sb as never)]);
+      await Promise.all([a.ensureAccount(sb as never), b.ensureAccount(sb as never)]);
       expect(sb.signIns()).toBe(1);
     } finally {
       if (!hadWindow) delete g.window;
@@ -125,8 +125,8 @@ describe('ensureSession across module copies', () => {
         },
       };
       vi.resetModules();
-      const { ensureSession } = await import('@/components/Auth');
-      const session = await ensureSession(sb as never);
+      const { ensureAccount } = await import('@/components/Auth');
+      const session = await ensureAccount(sb as never);
       expect(signIns).toBe(0);
       expect(session).toMatchObject({ access_token: 'from-the-other-tab' });
     } finally {
@@ -160,9 +160,9 @@ describe('account creation is serialised across tabs', () => {
     });
     try {
       vi.resetModules();
-      const { ensureSession } = await import('@/components/Auth');
+      const { ensureAccount } = await import('@/components/Auth');
       const sb = fakeClient();
-      await ensureSession(sb as never);
+      await ensureAccount(sb as never);
       expect(taken).toEqual(['pokai-anonymous-sign-in']);
       expect(sb.signIns()).toBe(1);
     } finally { restore(); }
@@ -177,9 +177,9 @@ describe('account creation is serialised across tabs', () => {
     });
     try {
       vi.resetModules();
-      const { ensureSession } = await import('@/components/Auth');
+      const { ensureAccount } = await import('@/components/Auth');
       const sb = fakeClient({ stored: { access_token: 'existing' } });
-      await ensureSession(sb as never);
+      await ensureAccount(sb as never);
       expect(taken).toEqual([]);
       expect(sb.signIns()).toBe(0);
     } finally { restore(); }
@@ -191,10 +191,83 @@ describe('account creation is serialised across tabs', () => {
     const restore = withNavigator(undefined);
     try {
       vi.resetModules();
-      const { ensureSession } = await import('@/components/Auth');
+      const { ensureAccount } = await import('@/components/Auth');
       const sb = fakeClient();
-      await expect(ensureSession(sb as never)).resolves.toBeTruthy();
+      await expect(ensureAccount(sb as never)).resolves.toBeTruthy();
       expect(sb.signIns()).toBe(1);
     } finally { restore(); }
+  });
+});
+
+/**
+ * The fix that actually closed this: nothing creates an account on load.
+ *
+ * Two earlier fixes narrowed the bug and neither closed it. The diagnostic said
+ * why -- accounts created in pairs carried DIFFERENT page ids, so they came
+ * from two documents, and no lock held inside one page can see the other. A
+ * prerender, a duplicated tab, a restored window: the browser runs our code
+ * twice for one visit whenever it likes.
+ *
+ * So the race was removed rather than won. Reading a session must never create
+ * one; only a deliberate press does. Two documents loading at once then create
+ * zero accounts between them, because nobody has pressed anything.
+ */
+describe('loading a page creates no account', () => {
+  it('reads the stored session without ever signing in', async () => {
+    vi.resetModules();
+    const { loadSession } = await import('@/components/Auth');
+    const sb = fakeClient();
+    await loadSession(sb as never);
+    expect(sb.signIns()).toBe(0);
+  });
+
+  it('creates nothing when five components mount at once', async () => {
+    // This is the exact scenario that stranded the founder's cards: Scanner,
+    // AddToCollection, Portfolio, Collection and History all mounting together.
+    vi.resetModules();
+    const { loadSession } = await import('@/components/Auth');
+    const sb = fakeClient();
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => loadSession(sb as never)),
+    );
+    expect(sb.signIns()).toBe(0);
+    expect(results.every((r) => r === null)).toBe(true);
+  });
+
+  it('creates nothing when TWO documents load at the same instant', async () => {
+    // The case no in-page lock could ever cover, and the one production kept
+    // hitting. Two separate module instances, each a fresh document.
+    const sb = fakeClient();
+    vi.resetModules();
+    const docA = await import('@/components/Auth');
+    vi.resetModules();
+    const docB = await import('@/components/Auth');
+    await Promise.all([loadIn(docA), loadIn(docB)]);
+    expect(sb.signIns()).toBe(0);
+
+    async function loadIn(mod: { loadSession: (c: never) => Promise<unknown> }) {
+      return mod.loadSession(sb as never);
+    }
+  });
+
+  it('creates exactly one when someone presses the button', async () => {
+    vi.resetModules();
+    const { loadSession, ensureAccount } = await import('@/components/Auth');
+    const sb = fakeClient();
+    await loadSession(sb as never);          // the page loads: nothing created
+    expect(sb.signIns()).toBe(0);
+    await ensureAccount(sb as never);        // the person acts: one account
+    expect(sb.signIns()).toBe(1);
+    await ensureAccount(sb as never);        // and pressing again reuses it
+    expect(sb.signIns()).toBe(1);
+  });
+
+  it('reuses a stored session rather than making a second account', async () => {
+    vi.resetModules();
+    const { ensureAccount } = await import('@/components/Auth');
+    const sb = fakeClient({ stored: { access_token: 'from-last-visit' } });
+    const s = await ensureAccount(sb as never);
+    expect(sb.signIns()).toBe(0);
+    expect(s).toMatchObject({ access_token: 'from-last-visit' });
   });
 });

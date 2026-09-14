@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from './Auth';
-import Account from './Account';
+import NothingYet from './NothingYet';
 import PortfolioView, { type Data } from './PortfolioView';
 
 export default function Portfolio({ active = true }: { active?: boolean }) {
@@ -51,20 +51,11 @@ export default function Portfolio({ active = true }: { active?: boolean }) {
   // failed, and then it says why.
   if (!session) {
     return (
-      <div>
-        {signInError && (
-          <p style={{
-            fontSize: 12.5, color: '#FF9C8A', background: 'rgba(232,72,58,0.12)',
-            border: '1px solid rgba(232,72,58,0.35)', borderRadius: 12, padding: '10px 12px',
-          }}>
-            Could not start a session automatically: {signInError}
-          </p>
-        )}
-        <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-          Sign in to see what your collection is worth.
-        </p>
-        <Account isAnonymous={false} />
-      </div>
+      <NothingYet
+        title="Nothing to value yet"
+        body="Scan a card and add it, and this page starts tracking what your collection is worth from that moment."
+        signInError={signInError}
+      />
     );
   }
 

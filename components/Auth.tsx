@@ -15,38 +15,40 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabaseBrowser } from '@/lib/supabase/browser';
+import { supabaseBrowser, SUPABASE_NOT_CONFIGURED } from '@/lib/supabase/browser';
 import { captchaToken } from '@/lib/captcha';
 
 /**
- * The ONE anonymous sign-in, shared by every component that needs a session.
+ * WHERE ACCOUNTS COME FROM, and why this file is careful.
  *
- * WHY THIS IS A MODULE-LEVEL SINGLETON. Five components call useSession()
- * independently -- Scanner, AddToCollection, Portfolio, Collection, History --
- * and several of them mount together. Each ran this effect, each found no
+ * An account used to be created EAGERLY, on page load, for everybody. Five
+ * components called useSession() independently -- Scanner, AddToCollection,
+ * Portfolio, Collection, History -- several mounted together, each found no
  * stored session, and each created its own anonymous account. Last one to
- * finish won the browser's storage; the rest became accounts nobody could sign
- * back into.
+ * finish won the browser's storage; the rest became accounts nobody could ever
+ * sign back into.
  *
- * That is not a cosmetic race. Row-level security is doing its job, so a card
- * saved with the losing account's token is that account's card, and it is
- * simply gone from the user's view. Sterling's live database on 2026-09-08 had
- * THREE anonymous users created inside thirty minutes with his cards split
- * across them -- three cards under one, one under another -- and the app showed
- * him "1 card" while the first three sat there unreachable.
+ * That is not cosmetic. Row-level security does its job, so a card saved with a
+ * losing account's token belongs to that account and is simply gone from the
+ * user's view. On 2026-09-08 the founder's four cards ended up split across
+ * three accounts while the app told him he had one.
  *
- * A promise, not a boolean: the window that matters is between starting the
- * sign-in and finishing it, which is exactly when a flag has not been set yet.
- * Everyone awaits the same promise, so there is exactly one sign-in.
- */
-/**
- * Held on the page itself, not just in this module.
+ * Two fixes narrowed it and neither closed it: a page-scoped promise, then a
+ * cross-tab Web Locks request around creation. Production kept producing pairs.
+ * The diagnostic below finally said why -- the two accounts in a pair carry
+ * DIFFERENT page ids, so they come from two documents, not one racing page.
+ * A prerender, a duplicate tab, a restored session: the browser can and does
+ * run our code twice for one visit, and no amount of locking inside one page
+ * sees the other.
  *
- * Module state is per module INSTANCE, and a bundler is free to give two
- * chunks their own copy -- at which point a module-level singleton silently
- * becomes two singletons. The page is the thing there is exactly one of, so
- * the lock lives there. Production bore this out: the burst of new accounts
- * per page load fell from six to two, not to one.
+ * So the race is removed rather than won. NOTHING creates an account on load
+ * any more. An account is created at the moment a person does something that
+ * needs one -- pressing the shutter, or saving a card -- and a person can only
+ * press a button in the document they are actually looking at. Two documents
+ * loading at once now create zero accounts between them.
+ *
+ * The lock stays. It is cheap, and it still covers the one case a button press
+ * cannot rule out: two tabs genuinely in use.
  */
 const LOCK = '__pokaiSession';
 
@@ -158,22 +160,45 @@ async function createAnonymous(
   return anon.session;
 }
 
-export function ensureSession(sb: NonNullable<ReturnType<typeof supabaseBrowser>>): Promise<Session | null> {
+/**
+ * The session this browser already has, or null. NEVER creates one.
+ *
+ * This is what every component calls on mount. Reading is safe to do five times
+ * over; creating is not, which is the entire lesson of this file.
+ *
+ * Cached per page so five mounts make one storage read, not five.
+ */
+export function loadSession(
+  sb: NonNullable<ReturnType<typeof supabaseBrowser>>,
+): Promise<Session | null> {
   const existing = held();
   if (existing) return existing;
-  const started = (async () => {
-    const { data } = await sb.auth.getSession();
-    if (data.session) return data.session;
+  const started = sb.auth.getSession().then(({ data }) => data.session ?? null);
+  hold(started);
+  started.catch(() => hold(null));
+  return started;
+}
 
-    // Beyond this point we are about to CREATE an account, which is the only
-    // irreversible thing this function does. Everything below runs inside a
-    // cross-tab lock.
+/**
+ * The session, creating an anonymous account if there is not one yet.
+ *
+ * Call this ONLY from a path a person deliberately started: pressing the
+ * shutter, saving a card. Never from a mount, a render, or an effect that runs
+ * because a page loaded -- that is the bug this shape exists to prevent.
+ */
+export function ensureAccount(
+  sb: NonNullable<ReturnType<typeof supabaseBrowser>>,
+): Promise<Session | null> {
+  const started = (async () => {
+    const existing = await loadSession(sb);
+    if (existing) return existing;
+
+    // Creating is the only irreversible thing here, so it runs inside a
+    // cross-tab lock -- and re-checks storage once it has the lock, because
+    // the tab that held it before us may have just created the account.
     return withSignInLock(() => createAnonymous(sb));
   })();
   hold(started);
-  // Clear on failure so a later mount can try again. Keeping a rejected
-  // promise would mean one bad moment at startup left the app permanently
-  // unable to sign anyone in.
   started.catch(() => hold(null));
   return started;
 }
@@ -187,27 +212,51 @@ export function useSession() {
     const sb = supabaseBrowser();
     if (!sb) { setReady(true); return; }
     let alive = true;
-    ensureSession(sb)
+    // READ ONLY. A component mounting must never bring an account into
+    // existence -- see the note at the top of this file.
+    loadSession(sb)
       .then((s) => { if (alive) setSession(s); })
       .catch((e: unknown) => {
         if (!alive) return;
-        // A rejection here (a navigator-lock timeout, storage blocked by
-        // private browsing, anonymous sign-ins switched off) used to leave
-        // `ready` false forever, so AddToCollection rendered null and the save
-        // button simply never appeared -- with nothing on screen to say why.
+        // Storage blocked by private browsing, a navigator-lock timeout. This
+        // used to leave `ready` false forever, so AddToCollection rendered null
+        // and the save button never appeared, with nothing on screen to say why.
         const msg = e instanceof Error ? e.message : String(e);
-        console.warn('Could not establish a session:', msg);
+        console.warn('Could not read the saved session:', msg);
         setSignInError(msg);
       })
       .finally(() => { if (alive) setReady(true); });
     const { data: sub } = sb.auth.onAuthStateChange((event, s) => {
       // Signing out must also drop the shared promise. Without this,
-      // ensureSession would hand the next mount the session that was just
-      // signed out of.
+      // loadSession would hand the next mount the session just signed out of.
       if (event === 'SIGNED_OUT') hold(null);
       setSession(s);
     });
     return () => { alive = false; sub.subscription.unsubscribe(); };
+  }, []);
+
+  /**
+   * Get a session, creating an anonymous account if needed.
+   *
+   * For deliberate actions only. Returns null when Supabase is unconfigured or
+   * account creation failed, and sets signInError with the real reason so the
+   * caller can show it rather than failing silently (rule 4).
+   */
+  const ensure = useCallback(async (): Promise<Session | null> => {
+    const sb = supabaseBrowser();
+    if (!sb) { setSignInError(SUPABASE_NOT_CONFIGURED); return null; }
+    try {
+      const s = await ensureAccount(sb);
+      setSession(s);
+      setSignInError(null);
+      return s;
+    } catch (e) {
+      // "Anonymous sign-ins are disabled" is a switch in the Supabase
+      // dashboard; no retry fixes it, but the message names it exactly.
+      const msg = e instanceof Error ? e.message : String(e);
+      setSignInError(msg);
+      return null;
+    }
   }, []);
 
   const signOut = useCallback(async () => {
@@ -216,9 +265,10 @@ export function useSession() {
   }, []);
 
   return {
-    session, ready, signOut, signInError,
+    session, ready, signOut, signInError, ensureAccount: ensure,
     isAnonymous: session?.user?.is_anonymous === true,
     // Null while anonymous. What the account bar shows once there is one.
     email: session?.user?.email ?? null,
   };
 }
+

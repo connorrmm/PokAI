@@ -31,7 +31,7 @@ function priceAge(c: ApiCard): string | null {
 export default function Scanner() {
   // Scans are attributed to an account so the spend is bounded. The app signs
   // everyone in anonymously on open, so this is present without anyone acting.
-  const { session } = useSession();
+  const { session, ensureAccount } = useSession();
   const videoRef = useRef<HTMLVideoElement>(null);
   /**
    * Live quality of the number region, sampled while the camera is open, and
@@ -522,7 +522,11 @@ export default function Scanner() {
     setStatus('Reading card…');
 
     try {
-      const { result, vision: v } = await identifyWithVision(cardPhoto, session?.access_token);
+      // Scanning needs an account: the daily cap is per user, and a scan with
+      // no identity cannot be rate-limited. It is created here, on a shutter
+      // press, and NOT when this component mounted -- see components/Auth.tsx.
+      const active = session ?? await ensureAccount();
+      const { result, vision: v } = await identifyWithVision(cardPhoto, active?.access_token);
       setVision(v);
       setOutcome(captureInfo && result.diagnostics
         ? { ...result, diagnostics: { ...result.diagnostics, ...captureInfo } }

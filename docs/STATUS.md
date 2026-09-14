@@ -97,7 +97,7 @@ State on 2026-09-14:
 
 | | |
 |---|---|
-| Anonymous accounts | 90 |
+| Anonymous accounts | 90 (debris from the fixed bug above; harmless, and safe to purge) |
 | Real (email) accounts | 2 |
 | Collection rows | 5, split across 2 accounts |
 | Cards cached | **0** |
@@ -139,20 +139,35 @@ silent and the failure mode is one user reading another's collection.
 
 ## 6. Known defects
 
-### a) Collections fragment across anonymous accounts — **highest value**
+### a) ~~Collections fragment across anonymous accounts~~ — **FIXED 2026-09-14**
 
-Anonymous accounts are still occasionally created in pairs, and a user's cards
-can end up on an account their browser can no longer reach. This happened to the
-founder: four cards across three accounts, reunited by hand on 2026-09-08.
+Kept here because the diagnosis took three attempts and the shape is worth
+remembering.
 
-Two fixes are in (a page-scoped promise, then a cross-tab Web Locks request
-around account creation) and it is **narrowed but not closed**. The diagnostic
-now in place records which page load created each account, and it says the two
-accounts in a pair come from *different* page loads — so the lock works, and the
-problem is that the stored session is not surviving, or one navigation is
-producing two documents.
+An anonymous account was created eagerly on page load. Five components each
+called `useSession()`, each found none, and each created one; the last to finish
+won the browser's storage and the rest became accounts nobody could sign back
+into. The founder's four cards ended up across three of them.
 
-Full detail, including the query, is in [`HANDOVER.md`](HANDOVER.md) §4a.
+A page-scoped promise fixed the five-per-page case. A cross-tab Web Locks
+request did not fix the rest, and the diagnostic said why: the accounts in a
+pair carried **different page ids**, so they came from two documents — a
+prerender, a duplicated tab, a restored window. No lock held inside one page can
+see another.
+
+So the race was removed rather than won. **Nothing creates an account on load.**
+`loadSession()` reads and never creates; `ensureAccount()` creates and is called
+only from a deliberate action — pressing the shutter, or saving a card. Two
+documents loading at once now create zero accounts between them, because nobody
+has pressed anything.
+
+Measured in a real browser, same script against both builds, five page loads
+including two simultaneous tabs:
+
+| | account-creation attempts |
+|---|---|
+| Before (`982df0b`) | **5** — including 2 from the two-tab case, the production symptom reproduced |
+| After | **0** |
 
 ### b) The card catalogue has never cached a row
 

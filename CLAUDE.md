@@ -59,13 +59,20 @@ rank, strong signals identify, ranking runs first.** Preserve that property.
 
 ## Current defects — do not ship over them
 
-Both are documented with evidence in `docs/STATUS.md` §6 and `docs/HANDOVER.md`.
+Documented with evidence in `docs/STATUS.md` §6 and `docs/HANDOVER.md`.
 
-1. **Collections fragment across anonymous accounts.** Narrowed, not closed. The
-   highest-value bug in the product: a collector whose cards vanish does not
-   come back.
-2. **The card catalogue has never cached a row** — the service-role key in Vercel
+1. **The card catalogue has never cached a row** — the service-role key in Vercel
    is rejected by Supabase. Costs money and latency, not correctness.
+
+**Fixed 2026-09-14: collections fragmenting across anonymous accounts.** Worth
+knowing because the shape recurs. An account was created eagerly on page load,
+so five components mounting created five accounts and a user's cards were
+stranded on four of them. Two locking fixes narrowed it and neither closed it —
+the accounts in a pair came from two DOCUMENTS, and no lock inside one page can
+see another. The race was removed instead of won: **nothing creates an account
+on load; only a deliberate press does** (`components/Auth.tsx`, `loadSession` vs
+`ensureAccount`). Keep that split. A component mounting must never bring an
+account into existence.
 
 ## Working agreements
 

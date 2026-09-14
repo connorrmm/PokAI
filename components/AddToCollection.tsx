@@ -36,7 +36,7 @@ export default function AddToCollection({
    */
   autoAccepted?: boolean;
 }) {
-  const { session, ready } = useSession();
+  const { session, ready, ensureAccount, signInError } = useSession();
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
@@ -48,10 +48,23 @@ export default function AddToCollection({
   const [condition, setCondition] = useState<Condition | null>(null);
 
   async function add() {
-    const token = session?.access_token;
-    if (!token) { setSigningIn(true); return; }
     setState('saving');
     setError(null);
+
+    // The account is created HERE, by a deliberate press, rather than when this
+    // component mounted. Five components mounting used to create five accounts
+    // and strand a user's cards on four of them; a person can only press this
+    // button in the document they are actually looking at.
+    const active = session ?? await ensureAccount();
+    const token = active?.access_token;
+    if (!token) {
+      setState('idle');
+      // Rule 4: say why. An empty panel with no save button was the old
+      // behaviour and it explained nothing.
+      setError(signInError ?? 'Could not start a session to save this card.');
+      setSigningIn(true);
+      return;
+    }
     try {
       const res = await fetch('/api/collection', {
         method: 'POST',
@@ -78,7 +91,7 @@ export default function AddToCollection({
       // The card is safely saved, so history and the correction can be
       // recorded now without any risk of a bookkeeping failure costing the
       // user the thing they actually wanted.
-      void logScan(session, {
+      void logScan(active, {
         read: read ?? null,
         confidence: confidence ?? null,
         autoAccepted,

@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from './Auth';
-import Account from './Account';
+import NothingYet from './NothingYet';
 
 interface Row {
   id: number; at: string; confidence: number | null; autoAccepted: boolean;
@@ -46,12 +46,10 @@ export default function History() {
 
   if (!session) {
     return (
-      <div>
-        <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 0 }}>
-          Sign in to keep a record of what you have scanned.
-        </p>
-        <Account isAnonymous={false} />
-      </div>
+      <NothingYet
+        title="No scans yet"
+        body="Every card you scan is recorded here, so you can see what was read and correct it if it was wrong."
+      />
     );
   }
 

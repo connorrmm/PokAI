@@ -110,44 +110,38 @@ Both are in [`SCANNER.md`](SCANNER.md) and [`CATALOG.md`](CATALOG.md) in full.
 
 ## 4. Known defects — inherited, not hidden
 
-### a) Collections fragment across accounts *(the important one)*
+### a) ~~Collections fragment across accounts~~ — fixed 2026-09-14
 
-The app signs everyone in anonymously so nothing blocks a first scan. That
-account is real and private, but it lives in one browser's storage.
+Left in this document on purpose: it took three attempts to diagnose, and the
+shape is one you could easily reintroduce.
 
-On 2026-09-08 three anonymous accounts were created within thirty minutes and
-the founder's four cards were split across them, invisible to him. Five
-components each called `useSession()`, each found no session, and each created
-its own account; the last one to finish won the browser's storage and the rest
-became accounts nobody could sign back into. Two fixes went in: a page-scoped
-promise, then a cross-tab Web Locks request around account creation.
+The app signs people in anonymously so nothing blocks a first scan — but it used
+to do that **on page load**. Five components each called `useSession()`, each
+found no session, and each created its own account. The last to finish won the
+browser's storage; the rest became accounts nobody could sign back into, holding
+cards nobody could see. On 2026-09-08 the founder's four cards were split across
+three accounts while the app told him he had one.
 
-**It is not fully fixed.** Accounts are still occasionally created in pairs.
-There is a diagnostic already in place: every anonymous account records the id
-of the page load that created it, in its own Supabase metadata. Querying that on
-2026-09-14 gave the answer:
+Two fixes narrowed it and neither closed it — a page-scoped promise, then a
+cross-tab Web Locks request. What finally answered it was a diagnostic that
+stamped each account with the id of the page load that made it: the two accounts
+in a pair had **different page ids**. Two documents, not one racing page. A
+prerender or a duplicated tab will do that, and nothing inside one page can lock
+against another.
 
-```
-17:04:46.248509  page ec88fd00
-17:04:46.248513  page f0444166   ← 4 microseconds later, DIFFERENT page id
-```
+The fix removes the race instead of winning it:
 
-Different page ids means **two separate page loads**, each signing in once — not
-one page signing in twice. So the lock is doing its job; what is failing is that
-the stored session is not surviving, or two documents are being created for one
-navigation (a speculative prerender would do exactly this). That is where to
-pick it up. The query:
+- **`loadSession()`** reads the stored session and never creates one. This is
+  what every component calls on mount.
+- **`ensureAccount()`** creates one, and is called only from a deliberate action
+  — the shutter, or saving a card.
 
-```sql
-select raw_user_meta_data->>'created_by_page' as page_id, count(*), min(created_at)
-from auth.users where is_anonymous group by 1 order by 3 desc;
-```
+**Keep that split.** If you ever call `ensureAccount()` from a mount, a render,
+or a load-triggered effect, you have rebuilt the bug.
 
-Live state today: 90 anonymous accounts, 2 real ones, 5 collection rows split
-across 2 accounts.
-
-**This is the highest-value bug in the product.** A collector whose cards vanish
-does not come back.
+Verified in a real browser across five page loads including two simultaneous
+tabs: the old build made **5** account-creation attempts, the new build makes
+**0**. `__tests__/session.test.ts` holds that line.
 
 ### b) The card catalogue has never cached a single row
 
